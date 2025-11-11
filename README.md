@@ -14,13 +14,16 @@ Interactive AI chat assistant in TypeScript - migrated from Python. Azor is your
 - 🔌 Support for multiple LLM backends:
   - Google Gemini
   - Local LLaMA (via node-llama-cpp)
+  - Ollama (local models via REST API)
 
 ## Prerequisites
 
 - Node.js 20+
 - npm or yarn
-- Google Gemini API key (for Gemini engine)
-- LLaMA model file in GGUF format (for LLaMA engine)
+- **One of the following LLM backends**:
+  - Google Gemini API key (for Gemini engine)
+  - LLaMA model file in GGUF format (for LLaMA engine)
+  - Ollama installed and running (for Ollama engine - recommended for local use)
 
 ## Installation
 
@@ -58,6 +61,17 @@ LLAMA_MODEL_PATH=/path/to/model.gguf
 LLAMA_GPU_LAYERS=1
 LLAMA_CONTEXT_SIZE=2048
 ```
+
+### Ollama Configuration
+
+```env
+ENGINE=OLLAMA
+OLLAMA_MODEL_NAME=llama3.2
+OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_TIMEOUT=30000
+```
+
+> **Note**: For detailed Ollama setup instructions, see [OLLAMA.md](./OLLAMA.md)
 
 ## Usage
 
@@ -121,7 +135,9 @@ azor-chatdog-ts/
 │   │   ├── geminiClient.ts
 │   │   ├── geminiValidation.ts
 │   │   ├── llamaClient.ts
-│   │   └── llamaValidation.ts
+│   │   ├── llamaValidation.ts
+│   │   ├── ollamaClient.ts
+│   │   └── ollamaValidation.ts
 │   ├── cli/
 │   │   ├── args.ts
 │   │   ├── console.ts
@@ -289,6 +305,13 @@ If you encounter issues loading LLaMA models:
 - Verify your API key is valid
 - Check internet connectivity
 - Ensure the model name is correct
+
+### Ollama Issues
+
+- Ensure Ollama is installed and running: `ollama serve`
+- Verify the model is downloaded: `ollama list`
+- Check connection: `curl http://localhost:11434/api/tags`
+- For more details, see [OLLAMA.md](./OLLAMA.md)
 
 ## License
 

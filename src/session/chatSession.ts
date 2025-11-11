@@ -3,6 +3,7 @@ import { loadSessionHistory, saveSessionHistory } from '../files/sessionFiles.js
 import { appendToWAL } from '../files/wal.js';
 import { GeminiLLMClient, GeminiChatSessionWrapper } from '../llm/geminiClient.js';
 import { LlamaClient, LlamaChatSession } from '../llm/llamaClient.js';
+import { OllamaClient, OllamaChatSession } from '../llm/ollamaClient.js';
 import { Assistant } from '../assistant/assistant.js';
 import { printInfo, printWarning } from '../cli/console.js';
 import type { ChatHistory, LLMResponse } from '../types.js';
@@ -13,12 +14,13 @@ interface LLMClientClass {
   fromEnvironment(): any;
 }
 
-type LLMClientType = typeof GeminiLLMClient | typeof LlamaClient;
-type ChatSessionType = GeminiChatSessionWrapper | LlamaChatSession;
+type LLMClientType = typeof GeminiLLMClient | typeof LlamaClient | typeof OllamaClient;
+type ChatSessionType = GeminiChatSessionWrapper | LlamaChatSession | OllamaChatSession;
 
 const ENGINE_MAPPING: Record<string, LLMClientType> = {
   LLAMA_CPP: LlamaClient,
-  GEMINI: GeminiLLMClient
+  GEMINI: GeminiLLMClient,
+  OLLAMA: OllamaClient
 };
 
 /**
@@ -29,7 +31,7 @@ export class ChatSession {
   private assistant: Assistant;
   private sessionId: string;
   private _history: ChatHistory;
-  private _llmClient: GeminiLLMClient | LlamaClient | null = null;
+  private _llmClient: GeminiLLMClient | LlamaClient | OllamaClient | null = null;
   private _llmChatSession: ChatSessionType | null = null;
   private _maxContextTokens: number = 32768;
 
@@ -65,6 +67,10 @@ export class ChatSession {
 
       if (SelectedClientClass === LlamaClient) {
         const client = LlamaClient.fromEnvironment();
+        await client.initializeModel();
+        this._llmClient = client;
+      } else if (SelectedClientClass === OllamaClient) {
+        const client = OllamaClient.fromEnvironment();
         await client.initializeModel();
         this._llmClient = client;
       } else {

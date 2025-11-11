@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Azor ChatDog is an interactive AI chat assistant in TypeScript with persistent session management, Write-Ahead Logging (WAL), and support for multiple LLM backends (Google Gemini and local LLaMA). This is a TypeScript port of a Python project with full type safety.
+Azor ChatDog is an interactive AI chat assistant in TypeScript with persistent session management, Write-Ahead Logging (WAL), and support for multiple LLM backends (Google Gemini, local LLaMA, and Ollama). This is a TypeScript port of a Python project with full type safety.
 
 ## Development Commands
 
@@ -98,11 +98,12 @@ All core types in `src/types.ts`:
 
 Environment variables loaded via dotenv:
 
-- `ENGINE` - LLM backend (GEMINI or LLAMA_CPP)
+- `ENGINE` - LLM backend (GEMINI, LLAMA_CPP, or OLLAMA)
 - Gemini: `GEMINI_API_KEY`, `MODEL_NAME`
 - LLaMA: `LLAMA_MODEL_NAME`, `LLAMA_MODEL_PATH`, `LLAMA_GPU_LAYERS`, `LLAMA_CONTEXT_SIZE`
+- Ollama: `OLLAMA_MODEL_NAME`, `OLLAMA_BASE_URL`, `OLLAMA_TIMEOUT`
 
-Validation happens in respective `*Validation.ts` files using Zod schemas.
+Validation happens in respective `*Validation.ts` files using Zod schemas. See `OLLAMA.md` for detailed Ollama setup instructions.
 
 ## Module System
 
