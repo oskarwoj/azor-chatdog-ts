@@ -60,6 +60,10 @@ LLAMA_MODEL_NAME=llama-3.1-8b-instruct
 LLAMA_MODEL_PATH=/path/to/model.gguf
 LLAMA_GPU_LAYERS=1
 LLAMA_CONTEXT_SIZE=2048
+# Sampling parameters (optional, defaults shown)
+LLAMA_TEMPERATURE=0.8
+LLAMA_TOP_P=0.9
+LLAMA_TOP_K=40
 ```
 
 ### Ollama Configuration
@@ -69,6 +73,10 @@ ENGINE=OLLAMA
 OLLAMA_MODEL_NAME=llama3.2
 OLLAMA_BASE_URL=http://localhost:11434
 OLLAMA_TIMEOUT=30000
+# Sampling parameters (optional, defaults shown)
+OLLAMA_TEMPERATURE=0.8
+OLLAMA_TOP_P=0.9
+OLLAMA_TOP_K=40
 ```
 
 > **Note**: For detailed Ollama setup instructions, see [OLLAMA.md](./OLLAMA.md)

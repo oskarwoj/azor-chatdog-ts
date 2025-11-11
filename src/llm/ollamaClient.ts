@@ -34,6 +34,15 @@ interface OllamaChatResponse {
 }
 
 /**
+ * Sampling parameters for model generation
+ */
+interface SamplingParams {
+	temperature: number;
+	top_p: number;
+	top_k: number;
+}
+
+/**
  * Wrapper class that provides a chat session interface compatible with Gemini's interface.
  */
 export class OllamaChatSession {
@@ -42,18 +51,21 @@ export class OllamaChatSession {
 	private timeout: number;
 	private _history: ChatHistory;
 	private systemInstruction: string;
+	private samplingParams: SamplingParams;
 
 	constructor(
 		baseUrl: string,
 		modelName: string,
 		timeout: number,
 		systemInstruction: string,
+		samplingParams: SamplingParams,
 		history: ChatHistory = [],
 	) {
 		this.baseUrl = baseUrl;
 		this.modelName = modelName;
 		this.timeout = timeout;
 		this.systemInstruction = systemInstruction;
+		this.samplingParams = samplingParams;
 		this._history = history;
 	}
 
@@ -107,6 +119,11 @@ export class OllamaChatSession {
 					model: this.modelName,
 					messages: messages,
 					stream: false,
+					options: {
+						temperature: this.samplingParams.temperature,
+						top_p: this.samplingParams.top_p,
+						top_k: this.samplingParams.top_k,
+					},
 				}),
 				signal: controller.signal,
 			});
@@ -171,12 +188,18 @@ export class OllamaClient {
 	private modelName: string;
 	private baseUrl: string;
 	private timeout: number;
+	private samplingParams: SamplingParams;
 	private isConnected: boolean = false;
 
 	constructor(
 		modelName: string,
 		baseUrl: string = 'http://localhost:11434',
 		timeout: number = 30000,
+		samplingParams: SamplingParams = {
+			temperature: 0.8,
+			top_p: 0.9,
+			top_k: 40,
+		},
 	) {
 		if (!baseUrl) {
 			throw new Error('Base URL cannot be empty');
@@ -185,6 +208,7 @@ export class OllamaClient {
 		this.modelName = modelName;
 		this.baseUrl = baseUrl.replace(/\/$/, ''); // Remove trailing slash
 		this.timeout = timeout;
+		this.samplingParams = samplingParams;
 	}
 
 	/**
@@ -206,15 +230,26 @@ export class OllamaClient {
 			modelName: process.env.OLLAMA_MODEL_NAME || 'llama3.2',
 			ollamaBaseUrl: process.env.OLLAMA_BASE_URL || 'http://localhost:11434',
 			ollamaTimeout: parseInt(process.env.OLLAMA_TIMEOUT || '30000', 10),
+			ollamaTemperature: parseFloat(process.env.OLLAMA_TEMPERATURE || '0.8'),
+			ollamaTopP: parseFloat(process.env.OLLAMA_TOP_P || '0.9'),
+			ollamaTopK: parseInt(process.env.OLLAMA_TOP_K || '40', 10),
 		});
 
 		printInfo(`Łączenie z serwerem Ollama: ${configData.ollamaBaseUrl}`);
 		printInfo(`Model: ${configData.modelName}`);
+		printInfo(
+			`Parametry: Temperature=${configData.ollamaTemperature}, Top-P=${configData.ollamaTopP}, Top-K=${configData.ollamaTopK}`,
+		);
 
 		return new OllamaClient(
 			configData.modelName,
 			configData.ollamaBaseUrl,
 			configData.ollamaTimeout,
+			{
+				temperature: configData.ollamaTemperature,
+				top_p: configData.ollamaTopP,
+				top_k: configData.ollamaTopK,
+			},
 		);
 	}
 
@@ -278,6 +313,7 @@ export class OllamaClient {
 			this.modelName,
 			this.timeout,
 			systemInstruction,
+			this.samplingParams,
 			history,
 		);
 	}
@@ -324,6 +360,6 @@ export class OllamaClient {
 	 * Returns a ready-to-use message with model info and parameters.
 	 */
 	readyForUseMessage(): string {
-		return `✅ Klient Ollama gotowy do użycia (Model: ${this.modelName}, URL: ${this.baseUrl})`;
+		return `✅ Klient Ollama gotowy do użycia (Model: ${this.modelName}, URL: ${this.baseUrl}, T=${this.samplingParams.temperature}, TopP=${this.samplingParams.top_p}, TopK=${this.samplingParams.top_k})`;
 	}
 }

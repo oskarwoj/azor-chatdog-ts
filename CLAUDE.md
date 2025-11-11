@@ -100,8 +100,13 @@ Environment variables loaded via dotenv:
 
 - `ENGINE` - LLM backend (GEMINI, LLAMA_CPP, or OLLAMA)
 - Gemini: `GEMINI_API_KEY`, `MODEL_NAME`
-- LLaMA: `LLAMA_MODEL_NAME`, `LLAMA_MODEL_PATH`, `LLAMA_GPU_LAYERS`, `LLAMA_CONTEXT_SIZE`
-- Ollama: `OLLAMA_MODEL_NAME`, `OLLAMA_BASE_URL`, `OLLAMA_TIMEOUT`
+- LLaMA: `LLAMA_MODEL_NAME`, `LLAMA_MODEL_PATH`, `LLAMA_GPU_LAYERS`, `LLAMA_CONTEXT_SIZE`, `LLAMA_TEMPERATURE`, `LLAMA_TOP_P`, `LLAMA_TOP_K`
+- Ollama: `OLLAMA_MODEL_NAME`, `OLLAMA_BASE_URL`, `OLLAMA_TIMEOUT`, `OLLAMA_TEMPERATURE`, `OLLAMA_TOP_P`, `OLLAMA_TOP_K`
+
+**Sampling Parameters** (for local clients - LLaMA and Ollama):
+- `TEMPERATURE` (0-2, default: 0.8): Controls output randomness
+- `TOP_P` (0-1, default: 0.9): Nucleus sampling threshold
+- `TOP_K` (1+, default: 40): Limits vocabulary to top K tokens
 
 Validation happens in respective `*Validation.ts` files using Zod schemas. See `OLLAMA.md` for detailed Ollama setup instructions.
 

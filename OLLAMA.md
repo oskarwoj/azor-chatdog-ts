@@ -72,6 +72,11 @@ OLLAMA_BASE_URL=http://localhost:11434
 
 # Request timeout in milliseconds (defaults to 30000)
 OLLAMA_TIMEOUT=30000
+
+# Sampling parameters (control model output randomness and diversity)
+OLLAMA_TEMPERATURE=0.8    # Range: 0-2 (default: 0.8, lower = more focused, higher = more creative)
+OLLAMA_TOP_P=0.9          # Range: 0-1 (default: 0.9, nucleus sampling threshold)
+OLLAMA_TOP_K=40           # Range: 1+ (default: 40, limits vocabulary to top K tokens)
 ```
 
 ### Configuration Options Explained
@@ -80,6 +85,27 @@ OLLAMA_TIMEOUT=30000
 - **`OLLAMA_MODEL_NAME`**: The name of the model as shown in `ollama list`
 - **`OLLAMA_BASE_URL`**: URL where Ollama server is running (use default unless you've configured Ollama differently)
 - **`OLLAMA_TIMEOUT`**: Maximum time to wait for model responses (in milliseconds)
+
+#### Sampling Parameters
+
+These parameters control how the model generates responses:
+
+- **`OLLAMA_TEMPERATURE`**: Controls randomness in responses
+
+  - Lower values (0.1-0.5): More focused, deterministic, and conservative
+  - Medium values (0.6-0.9): Balanced creativity and coherence (recommended)
+  - Higher values (1.0-2.0): More creative and diverse, but potentially less coherent
+
+- **`OLLAMA_TOP_P`**: Nucleus sampling - considers only tokens with cumulative probability P
+
+  - Lower values (0.1-0.5): More focused responses
+  - Medium values (0.6-0.9): Balanced (recommended)
+  - Higher values (0.9-1.0): More diverse vocabulary
+
+- **`OLLAMA_TOP_K`**: Limits the model to choose from the top K most likely tokens
+  - Lower values (10-20): More focused vocabulary
+  - Medium values (30-50): Balanced (recommended)
+  - Higher values (60+): More diverse word choices
 
 ## Usage
 
@@ -98,6 +124,7 @@ npm start
 ```
 
 The application will automatically:
+
 1. Connect to your Ollama server
 2. Verify the connection
 3. Start a chat session with your configured model
@@ -124,6 +151,7 @@ To use a different model, either:
 **Error**: `Nie można połączyć się z serwerem Ollama`
 
 **Solutions**:
+
 - Ensure Ollama is running: `ollama serve`
 - Check if the server is accessible: `curl http://localhost:11434/api/tags`
 - Verify `OLLAMA_BASE_URL` in `.env` matches your Ollama server address
@@ -133,6 +161,7 @@ To use a different model, either:
 **Error**: Model not available or request fails
 
 **Solutions**:
+
 - Verify you've pulled the model: `ollama list`
 - Pull the model if missing: `ollama pull <model-name>`
 - Check that `OLLAMA_MODEL_NAME` exactly matches the model name from `ollama list`
@@ -140,6 +169,7 @@ To use a different model, either:
 ### Slow Responses
 
 **Solutions**:
+
 - Use a smaller model (e.g., `llama3.2` instead of `llama3.1:70b`)
 - Increase `OLLAMA_TIMEOUT` in `.env`
 - Ensure your system has adequate resources (RAM and CPU/GPU)
@@ -150,6 +180,7 @@ To use a different model, either:
 **Error**: Request timeout during generation
 
 **Solutions**:
+
 - Increase `OLLAMA_TIMEOUT` in `.env` (e.g., to `60000` for 60 seconds)
 - Use a faster/smaller model
 - Ensure Ollama isn't under heavy load from other processes
@@ -174,6 +205,7 @@ The client communicates with Ollama via its REST API:
 ### Token Counting
 
 Ollama returns token counts in the response metadata:
+
 - `prompt_eval_count`: Tokens in the prompt
 - `eval_count`: Tokens in the response
 
@@ -182,31 +214,35 @@ For token estimation, the client uses a fallback approximation of ~4 characters 
 ### History Management
 
 Chat history is converted between two formats:
+
 - **Internal format**: Used by azor-chatdog (role: 'user'|'model')
 - **Ollama format**: Used by Ollama API (role: 'user'|'assistant'|'system')
 
 ## Comparison with Other Backends
 
-| Feature | Ollama | Gemini | Local LLaMA |
-|---------|--------|--------|-------------|
-| **Privacy** | ✅ Local | ❌ Cloud | ✅ Local |
-| **Cost** | ✅ Free | 💰 Pay per token | ✅ Free |
-| **Setup** | ⚡ Easy | ⚡ Very Easy | 🔧 Complex |
-| **Performance** | 🚀 Fast | 🚀 Very Fast | 🐌 Varies |
-| **Model Variety** | ✅ Many | ❌ Fixed | ✅ Any GGUF |
-| **Resource Usage** | 📊 Medium | 📊 None (cloud) | 📊 High |
+| Feature            | Ollama    | Gemini           | Local LLaMA |
+| ------------------ | --------- | ---------------- | ----------- |
+| **Privacy**        | ✅ Local  | ❌ Cloud         | ✅ Local    |
+| **Cost**           | ✅ Free   | 💰 Pay per token | ✅ Free     |
+| **Setup**          | ⚡ Easy   | ⚡ Very Easy     | 🔧 Complex  |
+| **Performance**    | 🚀 Fast   | 🚀 Very Fast     | 🐌 Varies   |
+| **Model Variety**  | ✅ Many   | ❌ Fixed         | ✅ Any GGUF |
+| **Resource Usage** | 📊 Medium | 📊 None (cloud)  | 📊 High     |
 
 ## Recommended Models
 
 ### For Development/Testing
+
 - **`llama3.2`** (3B): Fast responses, low resource usage
 - **`phi3`** (3.8B): Excellent for coding tasks
 
 ### For General Use
+
 - **`llama3.1:8b`** (8B): Best balance of speed and quality
 - **`mistral`** (7B): Great general-purpose model
 
 ### For Best Quality (requires more resources)
+
 - **`llama3.1:70b`** (70B): Highest quality, requires 40GB+ RAM
 - **`mixtral`** (47B): Excellent reasoning capabilities
 
@@ -220,8 +256,8 @@ Chat history is converted between two formats:
 ## Support
 
 If you encounter issues with the Ollama integration, please check:
+
 1. Ollama server is running (`ollama serve`)
 2. Model is downloaded (`ollama list`)
 3. Configuration in `.env` is correct
 4. Server is accessible at the configured URL
-
