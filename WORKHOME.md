@@ -64,3 +64,44 @@ LLAMA_TOP_K=40
 ```
 
 Parametry są opcjonalne - jeśli nie zostaną ustawione, użyte będą wartości domyślne.
+
+# Zadanie 2
+
+AZØR - Nadaj tytuł wątkowi
+
+Najpierw ZAPROJEKTUJ - potem ZAKODUJ ficzer który umożliwia AZØROWI tytułowanie wątków (konwersacji) podczas ich tworzenia.
+
+W typowych aplikacjach konwersacyjnych działa to tak:
+
+- otwierasz nowy wątek, piszesz prompta
+- otrzymujesz odpowiedź (obviously)
+- wątek jest domyślnie TYTUŁOWANY na podstawie Twojego pierwszego prompta
+- możesz potem wątek "przenazwić", ale wyłącznie ręcznie. Automatyczne nazywanie wątku dzieje się tylko przy pierwszym prompcie.
+
+**ZADANIE**:
+
+- najpierw PRZEMYŚL jak to zrobić. Omawiaj na discordzie pomysły. Różnych rozwiązań jest sporo, są lepsze i gorsze, prostsze i trudniejsze
+- ZAIMPLEMENTUJ. Obecnie wątki można identyfikować jedynie po ID sesji i - o ile w przypadku przełączania wątku to musi zostać - o tyle wyświetlenie tytułu wątku (wraz z jego wcześniejszym ustaleniem) byłoby bardzo user-friendly.
+- Tytułowanie wątku dzieje się z automatu. Jeśli powstaje wątek (wysłałeś/aś prompta), to musi być zatytułowany
+- nowa komenda daje możliwość "przenazwić" tytuł wątku
+- Tytuł wątku jest (siłą rzeczy) przechowywany w plikach `.json`, dla spójności systemu
+
+# Zadanie 3
+
+AZØR - Wyspecjalizowani asystenci
+
+Rozbuduj AZØRA (kod bazowy - z `M1/azor-chatdog`)
+
+- kodujesz możliwość tworzenia różnych **wyspecjalizowanych asystentów**.
+- użytkownik przełącza asystenta manualnie, np. nową komendą
+- asystenci mogą być zahardkodowani w kodzie (choć można zaprogramować tworzenie nowych dynamicznie np. nową komendą)
+- Wątek powinien mieć określonego aktualnego asystenta (aby było spójnie i jednoznacznie)
+
+**CEL**: masz minimum 2 nowych asystentów (a AZØR zostaje - więc w sumie minimum trzech). I w możesz w trakcie trwania konwersacji ich przełączać.
+
+Inspiracje asystentów:
+
+- perfekcjonista przykładający ogromną wagę do detali.
+- biznesmen zorientowany na cele, wypowiadający się bardzo rzeczowo i krótko.
+- optymistyczny pochlebca który zawsze pocieszy i dopytuje jak się czujesz.
+  ale to może być co-/ktokolwiek.

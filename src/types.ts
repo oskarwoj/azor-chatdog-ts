@@ -21,6 +21,7 @@ export interface SessionMetadata {
   model: string;
   system_role: string;
   history: ChatHistory;
+  title?: string; // Optional human-readable title for the session
 }
 
 // Token info

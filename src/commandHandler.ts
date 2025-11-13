@@ -5,6 +5,7 @@ import { displayFullSession } from './commands/sessionDisplay.js';
 import { exportSessionToPdf } from './commands/sessionToPdf.js';
 import { removeSessionCommand } from './commands/sessionRemove.js';
 import { displayHistorySummary } from './commands/sessionSummary.js';
+import { renameSessionCommand } from './commands/sessionRename.js';
 
 const VALID_SLASH_COMMANDS = ['/exit', '/quit', '/switch', '/help', '/session', '/pdf'];
 
@@ -75,9 +76,9 @@ export async function handleCommand(userInput: string): Promise<boolean> {
   // Session subcommands
   else if (command === '/session') {
     if (parts.length < 2) {
-      printError('Błąd: Komenda /session wymaga podkomendy (list, display, pop, clear, new).');
+      printError('Błąd: Komenda /session wymaga podkomendy (list, display, pop, clear, new, rename, remove).');
     } else {
-      await handleSessionSubcommand(parts[1].toLowerCase(), manager);
+      await handleSessionSubcommand(parts.slice(1), manager);
     }
   }
 
@@ -93,7 +94,8 @@ export async function handleCommand(userInput: string): Promise<boolean> {
 /**
  * Handles /session subcommands.
  */
-async function handleSessionSubcommand(subcommand: string, manager: ReturnType<typeof getSessionManager>): Promise<void> {
+async function handleSessionSubcommand(parts: string[], manager: ReturnType<typeof getSessionManager>): Promise<void> {
+  const subcommand = parts[0].toLowerCase();
   const current = manager.getCurrentSession();
 
   if (subcommand === 'list') {
@@ -127,6 +129,9 @@ async function handleSessionSubcommand(subcommand: string, manager: ReturnType<t
     displayHelp(newSession.getSessionId());
   } else if (subcommand === 'remove') {
     await removeSessionCommand(manager);
+  } else if (subcommand === 'rename') {
+    const newTitle = parts.slice(1).join(' ');
+    await renameSessionCommand(manager, newTitle);
   } else {
     printError(`Błąd: Nieznana podkomenda dla /session: ${subcommand}. Użyj /help.`);
   }

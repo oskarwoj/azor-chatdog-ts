@@ -4,6 +4,7 @@ import { handleCommand } from './commandHandler.js';
 import { printAssistant, printInfo, printError } from './cli/console.js';
 import { getUserInput } from './cli/prompt.js';
 import { printWelcome } from './commands/welcome.js';
+import { generateTitleFromPrompt } from './utils/titleGenerator.js';
 
 /**
  * Initializes a new session or loads an existing one.
@@ -62,8 +63,21 @@ export async function mainLoop(): Promise<void> {
       // Conversation with the model
       const session = manager.getCurrentSession();
 
+      // Check if this is the first message (before sending)
+      const isFirstMessage = session.isEmpty();
+
       // Send message (handles WAL logging internally)
       const response = await session.sendMessage(userInput);
+
+      // Auto-generate title after first successful response
+      if (isFirstMessage) {
+        const llmClient = session.getLLMClient();
+        if (llmClient) {
+          const title = await generateTitleFromPrompt(userInput, llmClient);
+          session.setTitle(title);
+          printInfo(`✓ Wygenerowano tytuł sesji: "${title}"`);
+        }
+      }
 
       // Get token information
       const [totalTokens, remainingTokens, maxTokens] = await session.getTokenInfo();

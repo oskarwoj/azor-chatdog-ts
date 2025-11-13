@@ -34,11 +34,13 @@ export class ChatSession {
   private _llmClient: GeminiLLMClient | LlamaClient | OllamaClient | null = null;
   private _llmChatSession: ChatSessionType | null = null;
   private _maxContextTokens: number = 32768;
+  private _title: string | null = null;
 
-  constructor(assistant: Assistant, sessionId?: string, history?: ChatHistory) {
+  constructor(assistant: Assistant, sessionId?: string, history?: ChatHistory, title?: string | null) {
     this.assistant = assistant;
     this.sessionId = sessionId || randomUUID();
     this._history = history || [];
+    this._title = title || null;
   }
 
   /**
@@ -91,13 +93,13 @@ export class ChatSession {
    * Loads a session from disk.
    */
   static async loadFromFile(assistant: Assistant, sessionId: string): Promise<[ChatSession | null, string | null]> {
-    const [history, error] = loadSessionHistory(sessionId);
+    const [history, error, title] = loadSessionHistory(sessionId);
 
     if (error) {
       return [null, error];
     }
 
-    const session = new ChatSession(assistant, sessionId, history);
+    const session = new ChatSession(assistant, sessionId, history, title);
     await session.initialize();
     return [session, null];
   }
@@ -120,7 +122,8 @@ export class ChatSession {
       this.sessionId,
       this._history,
       this.assistant.systemPrompt,
-      this._llmClient.getModelName()
+      this._llmClient.getModelName(),
+      this._title
     );
   }
 
@@ -249,5 +252,26 @@ export class ChatSession {
    */
   getSessionId(): string {
     return this.sessionId;
+  }
+
+  /**
+   * Gets the session title.
+   */
+  getTitle(): string | null {
+    return this._title;
+  }
+
+  /**
+   * Sets the session title.
+   */
+  setTitle(title: string): void {
+    this._title = title;
+  }
+
+  /**
+   * Gets the LLM client instance (for title generation).
+   */
+  getLLMClient(): GeminiLLMClient | LlamaClient | OllamaClient | null {
+    return this._llmClient;
   }
 }

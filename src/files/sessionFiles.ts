@@ -21,18 +21,19 @@ interface StoredSessionMetadata {
   model: string;
   system_role: string;
   history: SerializedMessage[];
+  title?: string; // Optional human-readable title
 }
 
 /**
  * Loads session history from a JSON file in universal format.
  *
- * @returns [conversation_history, error_message]
+ * @returns [conversation_history, error_message, title]
  */
-export function loadSessionHistory(sessionId: string): [ChatHistory, string | null] {
+export function loadSessionHistory(sessionId: string): [ChatHistory, string | null, string | null] {
   const logFilename = join(LOG_DIR, `${sessionId}-log.json`);
 
   if (!existsSync(logFilename)) {
-    return [[], `Session log file '${logFilename}' does not exist. Starting new session.`];
+    return [[], `Session log file '${logFilename}' does not exist. Starting new session.`, null];
   }
 
   try {
@@ -46,12 +47,14 @@ export function loadSessionHistory(sessionId: string): [ChatHistory, string | nu
       timestamp: entry.timestamp
     }));
 
-    return [history, null];
+    const title = logData.title || null;
+
+    return [history, null, title];
   } catch (error) {
     if (error instanceof SyntaxError) {
-      return [[], `Cannot decode log file '${logFilename}'. Starting new session.`];
+      return [[], `Cannot decode log file '${logFilename}'. Starting new session.`, null];
     }
-    return [[], `Error reading session file: ${error}`];
+    return [[], `Error reading session file: ${error}`, null];
   }
 }
 
@@ -65,7 +68,8 @@ export function saveSessionHistory(
   sessionId: string,
   history: ChatHistory,
   systemPrompt: string,
-  modelName: string
+  modelName: string,
+  title?: string | null
 ): [boolean, string | null] {
   if (history.length < 2) {
     // Prevents saving empty/incomplete session
@@ -84,7 +88,8 @@ export function saveSessionHistory(
     session_id: sessionId,
     model: modelName,
     system_role: systemPrompt,
-    history: jsonHistory
+    history: jsonHistory,
+    ...(title && { title }) // Only include title if it's defined and not null
   };
 
   try {
@@ -100,6 +105,7 @@ export function saveSessionHistory(
  */
 export function listSessions(): Array<{
   id: string;
+  title?: string;
   messages_count?: number;
   last_activity?: string;
   error?: string;
@@ -136,6 +142,7 @@ export function listSessions(): Array<{
 
       return {
         id: sid,
+        title: logData.title,
         messages_count: historyLen,
         last_activity: timeStr,
         error: undefined
