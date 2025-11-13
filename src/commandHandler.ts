@@ -6,8 +6,9 @@ import { exportSessionToPdf } from './commands/sessionToPdf.js';
 import { removeSessionCommand } from './commands/sessionRemove.js';
 import { displayHistorySummary } from './commands/sessionSummary.js';
 import { renameSessionCommand } from './commands/sessionRename.js';
+import { listAssistants } from './assistant/assistants.js';
 
-const VALID_SLASH_COMMANDS = ['/exit', '/quit', '/switch', '/help', '/session', '/pdf'];
+const VALID_SLASH_COMMANDS = ['/exit', '/quit', '/switch', '/help', '/session', '/pdf', '/assistant'];
 
 /**
  * Handles slash commands. Returns True if the program should exit.
@@ -88,6 +89,15 @@ export async function handleCommand(userInput: string): Promise<boolean> {
     await exportSessionToPdf(await current.getHistory(), current.getSessionId(), current.assistantName);
   }
 
+  // Assistant management
+  else if (command === '/assistant') {
+    if (parts.length < 2) {
+      printError('Błąd: Komenda /assistant wymaga podkomendy (list, switch).');
+    } else {
+      await handleAssistantSubcommand(parts.slice(1), manager);
+    }
+  }
+
   return false;
 }
 
@@ -134,5 +144,54 @@ async function handleSessionSubcommand(parts: string[], manager: ReturnType<type
     await renameSessionCommand(manager, newTitle);
   } else {
     printError(`Błąd: Nieznana podkomenda dla /session: ${subcommand}. Użyj /help.`);
+  }
+}
+
+/**
+ * Handles /assistant subcommands.
+ */
+async function handleAssistantSubcommand(parts: string[], manager: ReturnType<typeof getSessionManager>): Promise<void> {
+  const subcommand = parts[0].toLowerCase();
+  const current = manager.getCurrentSession();
+
+  if (subcommand === 'list') {
+    // Display available assistants
+    printInfo('\n=== Dostępni asystenci ===');
+    const assistants = listAssistants();
+    assistants.forEach(assistant => {
+      const currentMarker = assistant.id === current.assistantId ? ' (AKTUALNY)' : '';
+      printInfo(`\n${assistant.name}${currentMarker}`);
+      printInfo(`  ID: ${assistant.id}`);
+      printInfo(`  Opis: ${assistant.description}`);
+    });
+    printInfo('\nUżycie: /assistant switch <ID>');
+  } else if (subcommand === 'switch') {
+    if (parts.length < 2) {
+      printError('Błąd: Użycie: /assistant switch <ID>');
+      printInfo('Aby zobaczyć listę dostępnych asystentów, użyj: /assistant list');
+    } else {
+      const assistantId = parts[1].toLowerCase();
+
+      // Check if already using this assistant
+      if (assistantId === current.assistantId) {
+        printInfo(`Już używasz asystenta: ${current.assistantName}`);
+        return;
+      }
+
+      try {
+        await manager.switchAssistantInCurrentSession(assistantId);
+        printInfo(`\n✓ Przełączono na asystenta: ${current.assistantName}`);
+        printInfo('Historia konwersacji została zachowana.');
+      } catch (error) {
+        if (error instanceof Error) {
+          printError(`Błąd: ${error.message}`);
+        } else {
+          printError('Błąd podczas przełączania asystenta.');
+        }
+        printInfo('Aby zobaczyć listę dostępnych asystentów, użyj: /assistant list');
+      }
+    }
+  } else {
+    printError(`Błąd: Nieznana podkomenda dla /assistant: ${subcommand}. Użyj /help.`);
   }
 }

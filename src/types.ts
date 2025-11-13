@@ -20,6 +20,7 @@ export interface SessionMetadata {
   session_id: string;
   model: string;
   system_role: string;
+  assistant_id?: string; // Optional assistant identifier (defaults to 'azor' if not present)
   history: ChatHistory;
   title?: string; // Optional human-readable title for the session
 }

@@ -5,6 +5,7 @@ import { GeminiLLMClient, GeminiChatSessionWrapper } from '../llm/geminiClient.j
 import { LlamaClient, LlamaChatSession } from '../llm/llamaClient.js';
 import { OllamaClient, OllamaChatSession } from '../llm/ollamaClient.js';
 import { Assistant } from '../assistant/assistant.js';
+import { createAssistant } from '../assistant/assistants.js';
 import { printInfo, printWarning } from '../cli/console.js';
 import type { ChatHistory, LLMResponse } from '../types.js';
 
@@ -91,15 +92,28 @@ export class ChatSession {
 
   /**
    * Loads a session from disk.
+   * If an assistant_id is stored in the file, it will be used to create the appropriate assistant.
+   * Otherwise, defaults to the provided assistant (for backward compatibility).
    */
   static async loadFromFile(assistant: Assistant, sessionId: string): Promise<[ChatSession | null, string | null]> {
-    const [history, error, title] = loadSessionHistory(sessionId);
+    const [history, error, title, assistantId] = loadSessionHistory(sessionId);
 
     if (error) {
       return [null, error];
     }
 
-    const session = new ChatSession(assistant, sessionId, history, title);
+    // Use stored assistant_id if available, otherwise use provided assistant
+    let sessionAssistant = assistant;
+    if (assistantId) {
+      try {
+        sessionAssistant = createAssistant(assistantId);
+      } catch (err) {
+        // If assistant_id is invalid, fall back to provided assistant
+        printWarning(`Nieznany asystent '${assistantId}' w sesji. Używam domyślnego asystenta.`);
+      }
+    }
+
+    const session = new ChatSession(sessionAssistant, sessionId, history, title);
     await session.initialize();
     return [session, null];
   }
@@ -123,7 +137,8 @@ export class ChatSession {
       this._history,
       this.assistant.systemPrompt,
       this._llmClient.getModelName(),
-      this._title
+      this._title,
+      this.assistant.id
     );
   }
 
@@ -206,6 +221,20 @@ export class ChatSession {
   }
 
   /**
+   * Switches to a different assistant while preserving conversation history.
+   * Reinitializes the LLM session with the new assistant's system prompt.
+   */
+  async switchAssistant(newAssistant: Assistant): Promise<void> {
+    this.assistant = newAssistant;
+
+    // Reinitialize LLM session with new system prompt
+    await this._initializeLLMSession();
+
+    // Save session with new assistant
+    await this.saveToFile();
+  }
+
+  /**
    * Counts total tokens in the conversation history.
    */
   async countTokens(): Promise<number> {
@@ -245,6 +274,13 @@ export class ChatSession {
    */
   get assistantName(): string {
     return this.assistant.name;
+  }
+
+  /**
+   * Gets the assistant ID.
+   */
+  get assistantId(): string {
+    return this.assistant.id;
   }
 
   /**

@@ -20,6 +20,7 @@ interface StoredSessionMetadata {
   session_id: string;
   model: string;
   system_role: string;
+  assistant_id?: string; // Optional assistant identifier
   history: SerializedMessage[];
   title?: string; // Optional human-readable title
 }
@@ -27,13 +28,13 @@ interface StoredSessionMetadata {
 /**
  * Loads session history from a JSON file in universal format.
  *
- * @returns [conversation_history, error_message, title]
+ * @returns [conversation_history, error_message, title, assistant_id]
  */
-export function loadSessionHistory(sessionId: string): [ChatHistory, string | null, string | null] {
+export function loadSessionHistory(sessionId: string): [ChatHistory, string | null, string | null, string | null] {
   const logFilename = join(LOG_DIR, `${sessionId}-log.json`);
 
   if (!existsSync(logFilename)) {
-    return [[], `Session log file '${logFilename}' does not exist. Starting new session.`, null];
+    return [[], `Session log file '${logFilename}' does not exist. Starting new session.`, null, null];
   }
 
   try {
@@ -48,13 +49,14 @@ export function loadSessionHistory(sessionId: string): [ChatHistory, string | nu
     }));
 
     const title = logData.title || null;
+    const assistantId = logData.assistant_id || null;
 
-    return [history, null, title];
+    return [history, null, title, assistantId];
   } catch (error) {
     if (error instanceof SyntaxError) {
-      return [[], `Cannot decode log file '${logFilename}'. Starting new session.`, null];
+      return [[], `Cannot decode log file '${logFilename}'. Starting new session.`, null, null];
     }
-    return [[], `Error reading session file: ${error}`, null];
+    return [[], `Error reading session file: ${error}`, null, null];
   }
 }
 
@@ -69,7 +71,8 @@ export function saveSessionHistory(
   history: ChatHistory,
   systemPrompt: string,
   modelName: string,
-  title?: string | null
+  title?: string | null,
+  assistantId?: string | null
 ): [boolean, string | null] {
   if (history.length < 2) {
     // Prevents saving empty/incomplete session
@@ -89,7 +92,8 @@ export function saveSessionHistory(
     model: modelName,
     system_role: systemPrompt,
     history: jsonHistory,
-    ...(title && { title }) // Only include title if it's defined and not null
+    ...(title && { title }), // Only include title if it's defined and not null
+    ...(assistantId && { assistant_id: assistantId }) // Only include assistant_id if it's defined and not null
   };
 
   try {

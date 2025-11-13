@@ -1,6 +1,7 @@
 import { printError, printInfo, displayHelp, displayFinalInstructions } from '../cli/console.js';
 import { ChatSession } from './chatSession.js';
 import { createAzorAssistant } from '../assistant/azor.js';
+import { createAssistant } from '../assistant/assistants.js';
 import { removeSessionFile } from '../files/sessionFiles.js';
 import type { ChatHistory } from '../types.js';
 
@@ -121,6 +122,21 @@ export class SessionManager {
     this._currentSession = newSession;
 
     return [newSession, removedSessionId, removeSuccess, removeError];
+  }
+
+  /**
+   * Switches the current session to a different assistant.
+   * Preserves the conversation history with the new assistant's personality.
+   *
+   * @param assistantId - ID of the assistant to switch to
+   */
+  async switchAssistantInCurrentSession(assistantId: string): Promise<void> {
+    if (!this._currentSession) {
+      throw new Error('No session is active. Cannot switch assistant.');
+    }
+
+    const newAssistant = createAssistant(assistantId);
+    await this._currentSession.switchAssistant(newAssistant);
   }
 
   /**
