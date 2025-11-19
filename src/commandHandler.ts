@@ -7,8 +7,9 @@ import { removeSessionCommand } from './commands/sessionRemove.js';
 import { displayHistorySummary } from './commands/sessionSummary.js';
 import { renameSessionCommand } from './commands/sessionRename.js';
 import { listAssistants } from './assistant/assistants.js';
+import { generateAudioFromLastMessage } from './commands/audioGeneration.js';
 
-const VALID_SLASH_COMMANDS = ['/exit', '/quit', '/switch', '/help', '/session', '/pdf', '/assistant'];
+const VALID_SLASH_COMMANDS = ['/exit', '/quit', '/switch', '/help', '/session', '/pdf', '/assistant', '/audio'];
 
 /**
  * Handles slash commands. Returns True if the program should exit.
@@ -87,6 +88,15 @@ export async function handleCommand(userInput: string): Promise<boolean> {
   else if (command === '/pdf') {
     const current = manager.getCurrentSession();
     await exportSessionToPdf(await current.getHistory(), current.getSessionId(), current.assistantName);
+  }
+
+  // Audio generation
+  else if (command === '/audio') {
+    const current = manager.getCurrentSession();
+    // Parse optional --lang parameter
+    const langParam = parts.find(p => p.startsWith('--lang='));
+    const language = langParam ? langParam.split('=')[1] : 'pl-PL';
+    await generateAudioFromLastMessage(await current.getHistory(), current.getSessionId(), current.assistantName, language);
   }
 
   // Assistant management

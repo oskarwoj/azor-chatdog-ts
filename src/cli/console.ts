@@ -62,6 +62,8 @@ export function displayHelp(sessionId: string): void {
   printHelp('  /session pop      - Usuwa ostatnią parę wpisów (TY i asystent).');
   printHelp('  /session clear    - Czyści historię bieżącej sesji.');
   printHelp('  /session new      - Rozpoczyna nową sesję.');
+  printHelp('\n  /pdf              - Eksportuje sesję do PDF.');
+  printHelp('  /audio [--lang=KOD] - Odczytuje ostatnią odpowiedź asystenta (domyślnie: pl-PL).');
   printHelp('\n  /assistant list   - Wyświetla listę dostępnych asystentów.');
   printHelp('  /assistant switch <ID> - Przełącza na innego asystenta.');
 }
