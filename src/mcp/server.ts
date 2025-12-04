@@ -1,7 +1,13 @@
 #!/usr/bin/env node
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { existsSync, readdirSync, statSync, unlinkSync } from 'fs';
+import {
+	existsSync,
+	readdirSync,
+	readFileSync,
+	statSync,
+	unlinkSync,
+} from 'fs';
 import { join } from 'path';
 import { z } from 'zod';
 import { LOG_DIR } from '../files/config.js';
@@ -151,6 +157,137 @@ server.registerTool(
 			const output = {
 				success: false,
 				message: `Failed to delete "${filename}": ${errorMessage}`,
+			};
+			return {
+				content: [{ type: 'text', text: JSON.stringify(output, null, 2) }],
+				structuredContent: output,
+			};
+		}
+	},
+);
+
+/**
+ * Tool: get_thread_data
+ * Reads and returns both metadata and content of a specific thread.
+ */
+server.registerTool(
+	'get_thread_data',
+	{
+		title: 'Get Thread Data',
+		description:
+			'Reads and returns both the metadata and the content (messages) of a specific thread from the ~/.azor/ directory.',
+		inputSchema: {
+			filename: z
+				.string()
+				.default('')
+				.describe(
+					'The filename of the thread to read (e.g., "session_123-log.json")',
+				),
+		},
+		outputSchema: {
+			success: z.boolean(),
+			message: z.string().optional(),
+			metadata: z
+				.object({
+					session_id: z.string(),
+					model: z.string(),
+					system_role: z.string(),
+					assistant_id: z.string().optional(),
+					title: z.string().optional(),
+				})
+				.optional(),
+			messages: z
+				.array(
+					z.object({
+						role: z.enum(['user', 'model']),
+						text: z.string(),
+						timestamp: z.string(),
+					}),
+				)
+				.optional(),
+		},
+	},
+	async ({ filename }) => {
+		// Validate filename is not empty and is a JSON file
+		if (!filename || filename.trim() === '') {
+			const output = {
+				success: false,
+				message: 'Invalid filename: filename cannot be empty.',
+			};
+			return {
+				content: [{ type: 'text', text: JSON.stringify(output, null, 2) }],
+				structuredContent: output,
+			};
+		}
+
+		if (!filename.endsWith('.json')) {
+			const output = {
+				success: false,
+				message: 'Invalid filename: only .json files can be read.',
+			};
+			return {
+				content: [{ type: 'text', text: JSON.stringify(output, null, 2) }],
+				structuredContent: output,
+			};
+		}
+
+		// Security check: ensure the filename doesn't contain path traversal
+		if (
+			filename.includes('..') ||
+			filename.includes('/') ||
+			filename.includes('\\')
+		) {
+			const output = {
+				success: false,
+				message: 'Invalid filename: path traversal is not allowed.',
+			};
+			return {
+				content: [{ type: 'text', text: JSON.stringify(output, null, 2) }],
+				structuredContent: output,
+			};
+		}
+
+		const filePath = join(LOG_DIR, filename);
+
+		if (!existsSync(filePath)) {
+			const output = {
+				success: false,
+				message: `File "${filename}" not found in ${LOG_DIR}.`,
+			};
+			return {
+				content: [{ type: 'text', text: JSON.stringify(output, null, 2) }],
+				structuredContent: output,
+			};
+		}
+
+		try {
+			const fileContent = readFileSync(filePath, 'utf-8');
+			const threadData = JSON.parse(fileContent);
+
+			const output = {
+				success: true,
+				metadata: {
+					session_id: threadData.session_id,
+					model: threadData.model,
+					system_role: threadData.system_role,
+					...(threadData.assistant_id && {
+						assistant_id: threadData.assistant_id,
+					}),
+					...(threadData.title && { title: threadData.title }),
+				},
+				messages: threadData.history || [],
+			};
+
+			return {
+				content: [{ type: 'text', text: JSON.stringify(output, null, 2) }],
+				structuredContent: output,
+			};
+		} catch (error) {
+			const errorMessage =
+				error instanceof Error ? error.message : String(error);
+			const output = {
+				success: false,
+				message: `Failed to read "${filename}": ${errorMessage}`,
 			};
 			return {
 				content: [{ type: 'text', text: JSON.stringify(output, null, 2) }],
