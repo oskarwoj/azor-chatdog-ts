@@ -32,10 +32,16 @@ export interface TokenInfo {
   percentage: number;
 }
 
+// Clarification request from the LLM
+export interface ClarificationRequest {
+  question: string;
+}
+
 // LLM Response
 export interface LLMResponse {
   text: string;
   tokensUsed?: number;
+  clarificationNeeded?: ClarificationRequest;
 }
 
 // Assistant configuration

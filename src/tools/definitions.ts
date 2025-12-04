@@ -60,12 +60,34 @@ export const getThreadDataTool: FunctionDeclaration = {
 };
 
 /**
+ * Tool definition for requesting clarification from the user.
+ * This is a special tool that interrupts the conversation flow to get user input.
+ */
+export const requestClarificationTool: FunctionDeclaration = {
+	name: 'request_clarification',
+	description:
+		'Request clarification from the user when the query is vague, ambiguous, or missing information needed to provide an accurate response. Use this instead of guessing or providing generic answers. The conversation will pause until the user provides the requested clarification.',
+	parameters: {
+		type: SchemaType.OBJECT,
+		properties: {
+			question: {
+				type: SchemaType.STRING,
+				description:
+					'The specific clarifying question to ask the user. Be clear and concise about what information is needed.',
+			},
+		},
+		required: ['question'],
+	},
+};
+
+/**
  * All available tools for AZOR.
  */
 export const azorTools: FunctionDeclaration[] = [
 	listThreadsTool,
 	deleteThreadTool,
 	getThreadDataTool,
+	requestClarificationTool,
 ];
 
 /**

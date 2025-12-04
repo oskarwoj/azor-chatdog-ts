@@ -21,6 +21,9 @@ import {
 } from '../utils/messageConverter.js';
 import { GeminiConfigSchema } from './geminiValidation.js';
 
+/** Name of the clarification tool for detection */
+const CLARIFICATION_TOOL_NAME = 'request_clarification';
+
 /**
  * Wrapper for Gemini chat session that provides universal dictionary-based history format.
  * Supports function calling with automatic tool execution.
@@ -37,6 +40,7 @@ export class GeminiChatSessionWrapper {
 	/**
 	 * Forwards message to Gemini session.
 	 * Handles function calling loop if tools are enabled.
+	 * Returns early with clarificationNeeded if the model requests clarification.
 	 */
 	async sendMessage(text: string): Promise<LLMResponse> {
 		let result = await this.geminiSession.sendMessage(text);
@@ -51,10 +55,36 @@ export class GeminiChatSessionWrapper {
 					break;
 				}
 
-				// Execute all function calls and collect responses
-				const functionResponses = await this.executeFunctionCalls(
-					functionCalls,
+				// Check for clarification request - handle it specially
+				const clarificationCall = functionCalls.find(
+					(call) => call.name === CLARIFICATION_TOOL_NAME,
 				);
+
+				if (clarificationCall) {
+					const question = (clarificationCall.args as { question?: string })
+						?.question;
+					if (question) {
+						// Return early with clarification request
+						// The calling code will handle prompting the user
+						return {
+							text: '',
+							tokensUsed: response.usageMetadata?.totalTokenCount,
+							clarificationNeeded: { question },
+						};
+					}
+				}
+
+				// Filter out clarification calls and execute remaining function calls
+				const otherCalls = functionCalls.filter(
+					(call) => call.name !== CLARIFICATION_TOOL_NAME,
+				);
+
+				if (otherCalls.length === 0) {
+					break;
+				}
+
+				// Execute all other function calls and collect responses
+				const functionResponses = await this.executeFunctionCalls(otherCalls);
 
 				// Send function responses back to the model
 				result = await this.geminiSession.sendMessage(functionResponses);

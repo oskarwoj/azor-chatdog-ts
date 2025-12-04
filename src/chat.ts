@@ -1,10 +1,14 @@
 import { getSessionIdFromCLI } from './cli/args.js';
 import { getSessionManager } from './session/index.js';
 import { handleCommand } from './commandHandler.js';
-import { printAssistant, printInfo, printError } from './cli/console.js';
+import { printAssistant, printInfo, printError, printWarning } from './cli/console.js';
 import { getUserInput } from './cli/prompt.js';
 import { printWelcome } from './commands/welcome.js';
 import { generateTitleFromPrompt } from './utils/titleGenerator.js';
+import type { LLMResponse } from './types.js';
+
+/** Maximum number of clarification rounds to prevent infinite loops */
+const MAX_CLARIFICATION_ROUNDS = 5;
 
 /**
  * Initializes a new session or loads an existing one.
@@ -66,25 +70,67 @@ export async function mainLoop(): Promise<void> {
       // Check if this is the first message (before sending)
       const isFirstMessage = session.isEmpty();
 
-      // Send message (handles WAL logging internally)
-      const response = await session.sendMessage(userInput);
+      // Send message and handle clarification loop
+      let response: LLMResponse;
+      let currentInput = userInput;
+      let clarificationRounds = 0;
 
-      // Auto-generate title after first successful response
-      if (isFirstMessage) {
-        const llmClient = session.getLLMClient();
-        if (llmClient) {
-          const title = await generateTitleFromPrompt(userInput, llmClient);
-          session.setTitle(title);
-          printInfo(`✓ Wygenerowano tytuł sesji: "${title}"`);
+      while (true) {
+        // Send message (handles WAL logging internally)
+        response = await session.sendMessage(currentInput);
+
+        // Check if clarification is needed
+        if (response.clarificationNeeded) {
+          clarificationRounds++;
+
+          if (clarificationRounds > MAX_CLARIFICATION_ROUNDS) {
+            printWarning(
+              `\nOsiągnięto maksymalną liczbę próśb o wyjaśnienie (${MAX_CLARIFICATION_ROUNDS}). Przerywam.`,
+            );
+            break;
+          }
+
+          // Display the clarification question
+          printAssistant(
+            `\n${session.assistantName} prosi o wyjaśnienie: ${response.clarificationNeeded.question}`,
+          );
+
+          // Get user's clarification
+          const clarification = await getUserInput('Twoja odpowiedź: ');
+
+          if (!clarification) {
+            printInfo('Anulowano wyjaśnienie.');
+            break;
+          }
+
+          // Continue with the clarification as the next input
+          currentInput = clarification;
+          continue;
         }
+
+        // Got a regular response, exit the loop
+        break;
       }
 
-      // Get token information
-      const [totalTokens, remainingTokens, maxTokens] = await session.getTokenInfo();
+      // If we got a real response (not just clarification loop exit)
+      if (response.text) {
+        // Auto-generate title after first successful response
+        if (isFirstMessage) {
+          const llmClient = session.getLLMClient();
+          if (llmClient) {
+            const title = await generateTitleFromPrompt(userInput, llmClient);
+            session.setTitle(title);
+            printInfo(`✓ Wygenerowano tytuł sesji: "${title}"`);
+          }
+        }
 
-      // Display response
-      printAssistant(`\n${session.assistantName}: ${response.text}`);
-      printInfo(`Tokens: ${totalTokens} (Pozostało: ${remainingTokens} / ${maxTokens})`);
+        // Get token information
+        const [totalTokens, remainingTokens, maxTokens] = await session.getTokenInfo();
+
+        // Display response
+        printAssistant(`\n${session.assistantName}: ${response.text}`);
+        printInfo(`Tokens: ${totalTokens} (Pozostało: ${remainingTokens} / ${maxTokens})`);
+      }
 
       // Save session
       const [success, error] = await session.saveToFile();
