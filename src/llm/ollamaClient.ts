@@ -5,15 +5,42 @@
 
 import { config } from 'dotenv';
 import { printError, printInfo } from '../cli/console.js';
+import { mcpClient } from '../mcp/client.js';
+import { ollamaToolConfig, type OllamaTool } from '../tools/definitions.js';
 import type { ChatHistory, LLMResponse, Message } from '../types.js';
 import { OllamaConfigSchema } from './ollamaValidation.js';
+
+/** Name of the clarification tool for detection */
+const CLARIFICATION_TOOL_NAME = 'request_clarification';
+
+/**
+ * Error thrown when the model doesn't support tool calling
+ */
+class ToolsNotSupportedError extends Error {
+	constructor(message: string) {
+		super(message);
+		this.name = 'ToolsNotSupportedError';
+	}
+}
+
+/**
+ * Ollama tool call returned by the model
+ */
+interface OllamaToolCall {
+	function: {
+		name: string;
+		arguments: Record<string, unknown>;
+	};
+}
 
 /**
  * Ollama message format for API requests
  */
 interface OllamaMessage {
-	role: 'user' | 'assistant' | 'system';
+	role: 'user' | 'assistant' | 'system' | 'tool';
 	content: string;
+	tool_calls?: OllamaToolCall[];
+	tool_name?: string;
 }
 
 /**
@@ -25,6 +52,7 @@ interface OllamaChatResponse {
 	message: {
 		role: string;
 		content: string;
+		tool_calls?: OllamaToolCall[];
 	};
 	done: boolean;
 	total_duration?: number;
@@ -44,6 +72,7 @@ interface SamplingParams {
 
 /**
  * Wrapper class that provides a chat session interface compatible with Gemini's interface.
+ * Supports function calling with automatic tool execution.
  */
 export class OllamaChatSession {
 	private baseUrl: string;
@@ -52,6 +81,10 @@ export class OllamaChatSession {
 	private _history: ChatHistory;
 	private systemInstruction: string;
 	private samplingParams: SamplingParams;
+	private toolsEnabled: boolean;
+	private toolsSupported: boolean = true; // Will be set to false if model doesn't support tools
+	private tools: OllamaTool[];
+	private _ollamaMessages: OllamaMessage[] = [];
 
 	constructor(
 		baseUrl: string,
@@ -60,6 +93,8 @@ export class OllamaChatSession {
 		systemInstruction: string,
 		samplingParams: SamplingParams,
 		history: ChatHistory = [],
+		toolsEnabled: boolean = false,
+		tools: OllamaTool[] = [],
 	) {
 		this.baseUrl = baseUrl;
 		this.modelName = modelName;
@@ -67,93 +102,259 @@ export class OllamaChatSession {
 		this.systemInstruction = systemInstruction;
 		this.samplingParams = samplingParams;
 		this._history = history;
+		this.toolsEnabled = toolsEnabled;
+		this.tools = tools;
 	}
 
 	/**
-	 * Converts internal ChatHistory format to Ollama message format.
+	 * Initializes Ollama messages array with system instruction.
 	 */
-	private convertToOllamaMessages(): OllamaMessage[] {
-		const messages: OllamaMessage[] = [];
-
-		// Add system message first
+	private initializeOllamaMessages(): void {
+		this._ollamaMessages = [];
 		if (this.systemInstruction) {
-			messages.push({
+			this._ollamaMessages.push({
 				role: 'system',
 				content: this.systemInstruction,
 			});
 		}
-
-		// Convert history
+		// Convert existing history to Ollama format
 		for (const msg of this._history) {
-			messages.push({
+			this._ollamaMessages.push({
 				role: msg.role === 'model' ? 'assistant' : 'user',
 				content: msg.parts[0]?.text || '',
 			});
 		}
+	}
 
-		return messages;
+	/**
+	 * Makes a chat API request to Ollama.
+	 * @param includeTools - Whether to include tools in the request (respects toolsSupported flag)
+	 */
+	private async makeOllamaRequest(
+		messages: OllamaMessage[],
+		includeTools: boolean = true,
+	): Promise<OllamaChatResponse> {
+		const controller = new AbortController();
+		const timeoutId = setTimeout(() => controller.abort(), this.timeout);
+
+		const requestBody: {
+			model: string;
+			messages: OllamaMessage[];
+			stream: boolean;
+			options: {
+				temperature: number;
+				top_p: number;
+				top_k: number;
+			};
+			tools?: OllamaTool[];
+		} = {
+			model: this.modelName,
+			messages: messages,
+			stream: false,
+			options: {
+				temperature: this.samplingParams.temperature,
+				top_p: this.samplingParams.top_p,
+				top_k: this.samplingParams.top_k,
+			},
+		};
+
+		// Include tools if enabled, supported, and requested
+		if (
+			includeTools &&
+			this.toolsEnabled &&
+			this.toolsSupported &&
+			this.tools.length > 0
+		) {
+			requestBody.tools = this.tools;
+		}
+
+		const response = await fetch(`${this.baseUrl}/api/chat`, {
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/json',
+			},
+			body: JSON.stringify(requestBody),
+			signal: controller.signal,
+		});
+
+		clearTimeout(timeoutId);
+
+		if (!response.ok) {
+			const errorText = await response.text();
+			// Check if the error is due to model not supporting tools
+			if (
+				errorText.includes('does not support tools') ||
+				errorText.includes('does not support functions')
+			) {
+				throw new ToolsNotSupportedError(errorText);
+			}
+			throw new Error(
+				`Ollama API error: ${response.status} ${response.statusText} - ${errorText}`,
+			);
+		}
+
+		return (await response.json()) as OllamaChatResponse;
+	}
+
+	/**
+	 * Executes tool calls and returns tool result messages.
+	 */
+	private async executeToolCalls(
+		toolCalls: OllamaToolCall[],
+	): Promise<{ messages: OllamaMessage[]; clarificationQuestion?: string }> {
+		const toolMessages: OllamaMessage[] = [];
+		let clarificationQuestion: string | undefined;
+
+		for (const call of toolCalls) {
+			const toolName = call.function.name;
+			const toolArgs = call.function.arguments;
+
+			// Check for clarification request - handle it specially
+			if (toolName === CLARIFICATION_TOOL_NAME) {
+				const question = (toolArgs as { question?: string })?.question;
+				if (question) {
+					clarificationQuestion = question;
+					// Add a placeholder tool response
+					toolMessages.push({
+						role: 'tool',
+						tool_name: toolName,
+						content: JSON.stringify({
+							status: 'clarification_requested',
+							message: 'Waiting for user clarification',
+						}),
+					});
+				}
+				continue;
+			}
+
+			printInfo(`🔧 Wykonuję narzędzie: ${toolName}`);
+
+			try {
+				const result = await mcpClient.executeTool(toolName, toolArgs);
+				toolMessages.push({
+					role: 'tool',
+					tool_name: toolName,
+					content: JSON.stringify(result),
+				});
+				printInfo(`✓ Narzędzie ${toolName} wykonane pomyślnie`);
+			} catch (error) {
+				const errorMessage =
+					error instanceof Error ? error.message : String(error);
+				printError(`✗ Błąd narzędzia ${toolName}: ${errorMessage}`);
+				toolMessages.push({
+					role: 'tool',
+					tool_name: toolName,
+					content: JSON.stringify({ error: errorMessage }),
+				});
+			}
+		}
+
+		return { messages: toolMessages, clarificationQuestion };
 	}
 
 	/**
 	 * Sends a message to the Ollama model and returns a response object.
+	 * Handles function calling loop if tools are enabled.
+	 * Returns early with clarificationNeeded if the model requests clarification.
 	 */
 	async sendMessage(text: string): Promise<LLMResponse> {
 		// Add user message to history
 		const userMessage: Message = { role: 'user', parts: [{ text }] };
 		this._history.push(userMessage);
 
+		// Initialize Ollama messages if needed
+		if (this._ollamaMessages.length === 0) {
+			this.initializeOllamaMessages();
+		}
+
+		// Add user message to Ollama messages
+		this._ollamaMessages.push({
+			role: 'user',
+			content: text,
+		});
+
+		let totalTokensUsed = 0;
+
 		try {
-			// Prepare messages for Ollama API
-			const messages = this.convertToOllamaMessages();
+			// Function calling loop
+			while (true) {
+				let data: OllamaChatResponse;
 
-			// Make API request to Ollama
-			const controller = new AbortController();
-			const timeoutId = setTimeout(() => controller.abort(), this.timeout);
+				try {
+					data = await this.makeOllamaRequest(this._ollamaMessages);
+				} catch (error) {
+					// If model doesn't support tools, disable them and retry
+					if (error instanceof ToolsNotSupportedError) {
+						printInfo(
+							`⚠️ Model ${this.modelName} nie wspiera narzędzi - wyłączam function calling`,
+						);
+						this.toolsSupported = false;
+						data = await this.makeOllamaRequest(this._ollamaMessages, false);
+					} else {
+						throw error;
+					}
+				}
 
-			const response = await fetch(`${this.baseUrl}/api/chat`, {
-				method: 'POST',
-				headers: {
-					'Content-Type': 'application/json',
-				},
-				body: JSON.stringify({
-					model: this.modelName,
-					messages: messages,
-					stream: false,
-					options: {
-						temperature: this.samplingParams.temperature,
-						top_p: this.samplingParams.top_p,
-						top_k: this.samplingParams.top_k,
-					},
-				}),
-				signal: controller.signal,
-			});
+				totalTokensUsed +=
+					(data.prompt_eval_count || 0) + (data.eval_count || 0);
 
-			clearTimeout(timeoutId);
+				const toolCalls = data.message.tool_calls;
 
-			if (!response.ok) {
-				const errorText = await response.text();
-				throw new Error(
-					`Ollama API error: ${response.status} ${response.statusText} - ${errorText}`,
-				);
+				// If tools are enabled, supported, and model returned tool calls
+				if (
+					this.toolsEnabled &&
+					this.toolsSupported &&
+					toolCalls &&
+					toolCalls.length > 0
+				) {
+					// Add assistant message with tool calls to Ollama messages
+					this._ollamaMessages.push({
+						role: 'assistant',
+						content: data.message.content || '',
+						tool_calls: toolCalls,
+					});
+
+					// Execute tool calls
+					const { messages: toolMessages, clarificationQuestion } =
+						await this.executeToolCalls(toolCalls);
+
+					// Add tool result messages
+					this._ollamaMessages.push(...toolMessages);
+
+					// If clarification was requested, return early
+					if (clarificationQuestion) {
+						return {
+							text: '',
+							tokensUsed: totalTokensUsed > 0 ? totalTokensUsed : undefined,
+							clarificationNeeded: { question: clarificationQuestion },
+						};
+					}
+
+					// Continue the loop to get the next response
+					continue;
+				}
+
+				// No more tool calls - we have the final response
+				const responseText = data.message.content;
+
+				// Add assistant response to Ollama messages
+				this._ollamaMessages.push({
+					role: 'assistant',
+					content: responseText,
+				});
+
+				// Add assistant response to history
+				const assistantMessage: Message = {
+					role: 'model',
+					parts: [{ text: responseText }],
+				};
+				this._history.push(assistantMessage);
+
+				return {
+					text: responseText,
+					tokensUsed: totalTokensUsed > 0 ? totalTokensUsed : undefined,
+				};
 			}
-
-			const data = (await response.json()) as OllamaChatResponse;
-			const responseText = data.message.content;
-
-			// Add assistant response to history
-			const assistantMessage: Message = {
-				role: 'model',
-				parts: [{ text: responseText }],
-			};
-			this._history.push(assistantMessage);
-
-			// Calculate approximate token count (prompt_eval_count + eval_count)
-			const tokensUsed = (data.prompt_eval_count || 0) + (data.eval_count || 0);
-
-			return {
-				text: responseText,
-				tokensUsed: tokensUsed > 0 ? tokensUsed : undefined,
-			};
 		} catch (error) {
 			if (error instanceof Error && error.name === 'AbortError') {
 				printError('Timeout podczas połączenia z Ollama');
@@ -298,11 +499,13 @@ export class OllamaClient {
 
 	/**
 	 * Creates a new chat session with the specified configuration.
+	 * Optionally enables tool/function calling capabilities.
 	 */
 	async createChatSession(
 		systemInstruction: string,
 		history: ChatHistory = [],
 		_thinkingBudget: number = 0,
+		enableTools: boolean = true,
 	): Promise<OllamaChatSession> {
 		if (!this.isConnected) {
 			await this.checkConnection();
@@ -315,6 +518,8 @@ export class OllamaClient {
 			systemInstruction,
 			this.samplingParams,
 			history,
+			enableTools,
+			enableTools ? ollamaToolConfig : [],
 		);
 	}
 

@@ -214,3 +214,57 @@ export function convertToLlamaTools(
  * Pre-converted tool configuration for Llama models.
  */
 export const llamaToolConfig = convertToLlamaTools(azorTools);
+
+/**
+ * Ollama tool definition format
+ */
+export interface OllamaTool {
+	type: 'function';
+	function: {
+		name: string;
+		description: string;
+		parameters: {
+			type: 'object';
+			required?: string[];
+			properties: Record<string, { type: string; description?: string }>;
+		};
+	};
+}
+
+/**
+ * Converts Gemini FunctionDeclaration array to Ollama tool format.
+ * This allows using the same tool definitions for Gemini, Llama, and Ollama models.
+ *
+ * @param declarations - Array of Gemini FunctionDeclaration objects
+ * @returns Array of OllamaTool objects for Ollama API
+ */
+export function convertToOllamaTools(
+	declarations: FunctionDeclaration[],
+): OllamaTool[] {
+	return declarations.map((decl) => ({
+		type: 'function' as const,
+		function: {
+			name: decl.name,
+			description: decl.description || '',
+			parameters: {
+				type: 'object' as const,
+				required: decl.parameters?.required || [],
+				properties: Object.entries(decl.parameters?.properties || {}).reduce(
+					(acc, [key, value]) => {
+						acc[key] = {
+							type: geminiTypeToGbnfType(value.type as SchemaType),
+							description: value.description,
+						};
+						return acc;
+					},
+					{} as Record<string, { type: string; description?: string }>,
+				),
+			},
+		},
+	}));
+}
+
+/**
+ * Pre-converted tool configuration for Ollama models.
+ */
+export const ollamaToolConfig = convertToOllamaTools(azorTools);
