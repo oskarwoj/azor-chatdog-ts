@@ -1,9 +1,13 @@
 /**
- * Tool definitions for Gemini function calling.
+ * Tool definitions for LLM function calling.
  * These definitions tell the LLM what tools are available.
+ * Supports both Gemini and Llama (node-llama-cpp) formats.
  */
 
 import { SchemaType, type FunctionDeclaration } from '@google/generative-ai';
+import type { ChatSessionModelFunctions } from 'node-llama-cpp';
+import { printError, printInfo } from '../cli/console.js';
+import { mcpClient } from '../mcp/client.js';
 
 /**
  * Tool definition for listing all chat threads.
@@ -96,3 +100,117 @@ export const azorTools: FunctionDeclaration[] = [
 export const toolConfig = {
 	functionDeclarations: azorTools,
 };
+
+/**
+ * Converts Gemini SchemaType to GBNF JSON Schema type string.
+ */
+function geminiTypeToGbnfType(
+	schemaType: SchemaType,
+): 'string' | 'number' | 'integer' | 'boolean' | 'object' | 'array' {
+	switch (schemaType) {
+		case SchemaType.STRING:
+			return 'string';
+		case SchemaType.NUMBER:
+			return 'number';
+		case SchemaType.INTEGER:
+			return 'integer';
+		case SchemaType.BOOLEAN:
+			return 'boolean';
+		case SchemaType.OBJECT:
+			return 'object';
+		case SchemaType.ARRAY:
+			return 'array';
+		default:
+			return 'string';
+	}
+}
+
+/**
+ * Converts Gemini FunctionDeclaration parameters to GBNF JSON Schema format.
+ */
+function convertParametersToGbnfSchema(
+	parameters: FunctionDeclaration['parameters'],
+): Record<string, unknown> | undefined {
+	if (!parameters) {
+		return undefined;
+	}
+
+	const gbnfSchema: Record<string, unknown> = {
+		type: geminiTypeToGbnfType(parameters.type),
+	};
+
+	if (parameters.properties) {
+		const properties: Record<string, unknown> = {};
+		for (const [key, value] of Object.entries(parameters.properties)) {
+			properties[key] = {
+				type: geminiTypeToGbnfType(value.type as SchemaType),
+				description: value.description,
+			};
+		}
+		gbnfSchema.properties = properties;
+	}
+
+	if (parameters.required && parameters.required.length > 0) {
+		gbnfSchema.required = parameters.required;
+	}
+
+	return gbnfSchema;
+}
+
+/**
+ * Creates a tool handler function that executes the tool via MCP client.
+ * @param toolName - The name of the tool to execute
+ * @returns Handler function for the tool
+ */
+function createToolHandler(
+	toolName: string,
+): (params: Record<string, unknown>) => Promise<unknown> {
+	return async (params: Record<string, unknown>) => {
+		printInfo(`🔧 Wykonuję narzędzie: ${toolName}`);
+		try {
+			const result = await mcpClient.executeTool(toolName, params);
+			printInfo(`✓ Narzędzie ${toolName} wykonane pomyślnie`);
+			return result;
+		} catch (error) {
+			const errorMessage =
+				error instanceof Error ? error.message : String(error);
+			printError(`✗ Błąd narzędzia ${toolName}: ${errorMessage}`);
+			return { error: errorMessage };
+		}
+	};
+}
+
+/**
+ * Converts Gemini FunctionDeclaration array to node-llama-cpp ChatSessionModelFunctions format.
+ * This allows using the same tool definitions for both Gemini and Llama models.
+ *
+ * @param declarations - Array of Gemini FunctionDeclaration objects
+ * @returns ChatSessionModelFunctions object for node-llama-cpp
+ */
+export function convertToLlamaTools(
+	declarations: FunctionDeclaration[],
+): ChatSessionModelFunctions {
+	const llamaTools: Record<
+		string,
+		{
+			description?: string;
+			params?: Record<string, unknown>;
+			handler: (params: Record<string, unknown>) => Promise<unknown>;
+		}
+	> = {};
+
+	for (const decl of declarations) {
+		llamaTools[decl.name] = {
+			description: decl.description,
+			params: convertParametersToGbnfSchema(decl.parameters),
+			handler: createToolHandler(decl.name),
+		};
+	}
+
+	return llamaTools as ChatSessionModelFunctions;
+}
+
+/**
+ * Pre-converted tool configuration for Llama models.
+ */
+export const llamaToolConfig = convertToLlamaTools(azorTools);

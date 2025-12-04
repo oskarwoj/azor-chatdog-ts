@@ -1,6 +1,7 @@
 /**
  * Local LLaMA LLM Client Implementation
  * Encapsulates all local LLaMA model interactions using node-llama-cpp.
+ * Supports function calling with automatic tool execution.
  */
 
 import { config } from 'dotenv';
@@ -10,10 +11,16 @@ import {
 	Llama,
 	LlamaModel,
 	LlamaChatSession as NativeLlamaChatSession,
+	type ChatSessionModelFunctions,
 } from 'node-llama-cpp';
 import { printError, printInfo } from '../cli/console.js';
+import { mcpClient } from '../mcp/client.js';
+import { llamaToolConfig } from '../tools/definitions.js';
 import type { ChatHistory, LLMResponse, Message } from '../types.js';
 import { LlamaConfigSchema } from './llamaValidation.js';
+
+/** Name of the clarification tool for detection */
+const CLARIFICATION_TOOL_NAME = 'request_clarification';
 
 /**
  * Sampling parameters for model generation
@@ -26,40 +33,136 @@ interface SamplingParams {
 
 /**
  * Wrapper class that provides a chat session interface compatible with Gemini's interface.
+ * Supports function calling with automatic tool execution.
  */
 export class LlamaChatSession {
 	private llamaSession: NativeLlamaChatSession;
 	private _history: ChatHistory;
 	private systemInstruction: string;
 	private samplingParams: SamplingParams;
+	private toolsEnabled: boolean;
+	private tools: ChatSessionModelFunctions | undefined;
+	private pendingClarification: string | null = null;
 
 	constructor(
 		llamaSession: NativeLlamaChatSession,
 		systemInstruction: string,
 		samplingParams: SamplingParams,
 		history: ChatHistory = [],
+		toolsEnabled: boolean = false,
 	) {
 		this.llamaSession = llamaSession;
 		this.systemInstruction = systemInstruction;
 		this.samplingParams = samplingParams;
 		this._history = history;
+		this.toolsEnabled = toolsEnabled;
+
+		// Create tools config with custom clarification handler
+		if (toolsEnabled) {
+			this.tools = this.createToolsWithClarificationHandler();
+		}
+	}
+
+	/**
+	 * Creates a modified tools config where the clarification handler
+	 * stores the question for later retrieval instead of executing via MCP.
+	 */
+	private createToolsWithClarificationHandler(): ChatSessionModelFunctions {
+		const tools: Record<
+			string,
+			{
+				description?: string;
+				params?: Record<string, unknown>;
+				handler: (params: Record<string, unknown>) => Promise<unknown>;
+			}
+		> = {};
+
+		// Copy all tools from the pre-converted config
+		for (const [name, tool] of Object.entries(llamaToolConfig)) {
+			if (name === CLARIFICATION_TOOL_NAME) {
+				// Special handler for clarification - stores the question
+				tools[name] = {
+					description: tool.description,
+					params: tool.params as Record<string, unknown> | undefined,
+					handler: async (params: Record<string, unknown>) => {
+						const question = params.question as string;
+						this.pendingClarification = question;
+						// Return a message that will be included in the response
+						return {
+							status: 'clarification_requested',
+							message: 'Waiting for user clarification',
+						};
+					},
+				};
+			} else {
+				// Regular tools - execute via MCP client
+				tools[name] = {
+					description: tool.description,
+					params: tool.params as Record<string, unknown> | undefined,
+					handler: async (params: Record<string, unknown>) => {
+						printInfo(`🔧 Wykonuję narzędzie: ${name}`);
+						try {
+							const result = await mcpClient.executeTool(name, params);
+							printInfo(`✓ Narzędzie ${name} wykonane pomyślnie`);
+							return result;
+						} catch (error) {
+							const errorMessage =
+								error instanceof Error ? error.message : String(error);
+							printError(`✗ Błąd narzędzia ${name}: ${errorMessage}`);
+							return { error: errorMessage };
+						}
+					},
+				};
+			}
+		}
+
+		return tools as ChatSessionModelFunctions;
 	}
 
 	/**
 	 * Sends a message to the LLaMA model and returns a response object.
+	 * Handles function calling loop if tools are enabled.
+	 * Returns early with clarificationNeeded if the model requests clarification.
 	 */
 	async sendMessage(text: string): Promise<LLMResponse> {
 		// Add user message to history
 		const userMessage: Message = { role: 'user', parts: [{ text }] };
 		this._history.push(userMessage);
 
+		// Reset pending clarification
+		this.pendingClarification = null;
+
 		try {
-			// Generate response using LLaMA with sampling parameters
-			const response = await this.llamaSession.prompt(text, {
+			// Build prompt options
+			const promptOptions: {
+				temperature: number;
+				topP: number;
+				topK: number;
+				functions?: ChatSessionModelFunctions;
+			} = {
 				temperature: this.samplingParams.temperature,
 				topP: this.samplingParams.topP,
 				topK: this.samplingParams.topK,
-			});
+			};
+
+			// Add tools if enabled
+			if (this.toolsEnabled && this.tools) {
+				promptOptions.functions = this.tools;
+			}
+
+			// Generate response using LLaMA with sampling parameters and optional tools
+			// node-llama-cpp automatically handles the function call loop via handlers
+			const response = await this.llamaSession.prompt(text, promptOptions);
+
+			// Check if clarification was requested during function calling
+			if (this.pendingClarification) {
+				const question = this.pendingClarification;
+				this.pendingClarification = null;
+				return {
+					text: '',
+					clarificationNeeded: { question },
+				};
+			}
 
 			const responseText = response.trim();
 
@@ -195,11 +298,13 @@ export class LlamaClient {
 
 	/**
 	 * Creates a new chat session with the specified configuration.
+	 * Optionally enables tool/function calling capabilities.
 	 */
 	async createChatSession(
 		systemInstruction: string,
 		history: ChatHistory = [],
-		thinkingBudget: number = 0,
+		_thinkingBudget: number = 0,
+		enableTools: boolean = true,
 	): Promise<LlamaChatSession> {
 		if (!this.llamaModel) {
 			throw new Error(
@@ -223,6 +328,7 @@ export class LlamaClient {
 			systemInstruction,
 			this.samplingParams,
 			history,
+			enableTools,
 		);
 	}
 
