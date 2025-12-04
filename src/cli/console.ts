@@ -54,7 +54,7 @@ export function displayHelp(sessionId: string): void {
   printInfo(`Aktualna sesja (ID): ${sessionId}`);
   printInfo(`Pliki sesji są zapisywane na bieżąco w: ${LOG_DIR}`);
   printHelp('Dostępne komendy (slash commands):');
-  printHelp('  /switch <ID>      - Przełącza na istniejącą sesję.');
+  printHelp('  /switch [ID]      - Przełącza na istniejącą sesję (interaktywne wyszukiwanie gdy bez ID).');
   printHelp('  /help             - Wyświetla tę pomoc.');
   printHelp('  /exit, /quit      - Zakończenie czatu.');
   printHelp('\n  /session list     - Wyświetla listę dostępnych sesji.');

@@ -1,5 +1,7 @@
 import { getSessionManager } from './session/index.js';
 import { printError, printInfo, displayHelp } from './cli/console.js';
+import { searchSession } from './cli/prompt.js';
+import { listSessions } from './files/sessionFiles.js';
 import { listSessionsCommand } from './commands/sessionList.js';
 import { displayFullSession } from './commands/sessionDisplay.js';
 import { exportSessionToPdf } from './commands/sessionToPdf.js';
@@ -42,36 +44,73 @@ export async function handleCommand(userInput: string): Promise<boolean> {
 
   // Switch command
   else if (command === '/switch') {
+    const current = manager.getCurrentSession();
+    let targetSessionId: string | null = null;
+
     if (parts.length === 2) {
-      const newId = parts[1];
-      const current = manager.getCurrentSession();
-      if (newId === current.getSessionId()) {
-        printInfo('Jesteś już w tej sesji.');
-      } else {
-        const [newSession, saveAttempted, previousSessionId, loadSuccessful, loadError, hasHistory] =
-          await manager.switchToSession(newId);
+      // Direct session ID provided
+      targetSessionId = parts[1];
+    } else if (parts.length === 1) {
+      // No session ID provided - show interactive search
+      const sessions = listSessions();
+      const sessionChoices = sessions
+        .filter(s => !s.error)
+        .map(s => ({
+          id: s.id,
+          title: s.title,
+          messagesCount: s.messages_count,
+          lastActivity: s.last_activity,
+        }));
 
-        // Handle console output for save attempt
-        if (saveAttempted) {
-          printInfo(`\nZapisuję bieżącą sesję: ${previousSessionId}...`);
-        }
+      if (sessionChoices.length === 0) {
+        printInfo('Brak zapisanych sesji do przełączenia.');
+        return false;
+      }
 
-        // Handle load result
-        if (!loadSuccessful) {
-          printError(`Nie można wczytać sesji o ID: ${newId}. ${loadError}`);
-        } else if (newSession) {
-          // Successfully switched
-          printInfo(`\n--- Przełączono na sesję: ${newSession.getSessionId()} ---`);
-          displayHelp(newSession.getSessionId());
+      // Filter out current session and check if there are others
+      const otherSessions = sessionChoices.filter(s => s.id !== current.getSessionId());
+      if (otherSessions.length === 0) {
+        printInfo('Brak innych sesji do przełączenia.');
+        return false;
+      }
 
-          // Display history summary if session has content
-          if (hasHistory) {
-            displayHistorySummary(await newSession.getHistory(), newSession.assistantName);
-          }
-        }
+      targetSessionId = await searchSession(sessionChoices, current.getSessionId());
+
+      if (!targetSessionId) {
+        // User cancelled
+        printInfo('Anulowano przełączanie sesji.');
+        return false;
       }
     } else {
-      printError('Błąd: Użycie: /switch <SESSION-ID>');
+      printError('Błąd: Użycie: /switch [SESSION-ID]');
+      return false;
+    }
+
+    // Perform the switch
+    if (targetSessionId === current.getSessionId()) {
+      printInfo('Jesteś już w tej sesji.');
+    } else {
+      const [newSession, saveAttempted, previousSessionId, loadSuccessful, loadError, hasHistory] =
+        await manager.switchToSession(targetSessionId);
+
+      // Handle console output for save attempt
+      if (saveAttempted) {
+        printInfo(`\nZapisuję bieżącą sesję: ${previousSessionId}...`);
+      }
+
+      // Handle load result
+      if (!loadSuccessful) {
+        printError(`Nie można wczytać sesji o ID: ${targetSessionId}. ${loadError}`);
+      } else if (newSession) {
+        // Successfully switched
+        printInfo(`\n--- Przełączono na sesję: ${newSession.getSessionId()} ---`);
+        displayHelp(newSession.getSessionId());
+
+        // Display history summary if session has content
+        if (hasHistory) {
+          displayHistorySummary(await newSession.getHistory(), newSession.assistantName);
+        }
+      }
     }
   }
 
