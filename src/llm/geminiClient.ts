@@ -1,15 +1,19 @@
 /**
  * Google Gemini LLM Client Implementation
- * Encapsulates all Google Gemini AI interactions.
+ * Encapsulates all Google Gemini AI interactions with function calling support.
  */
 
 import {
 	ChatSession,
+	FunctionCall,
+	FunctionResponsePart,
 	GenerativeModel,
 	GoogleGenerativeAI,
 } from '@google/generative-ai';
 import { config } from 'dotenv';
-import { printError } from '../cli/console.js';
+import { printError, printInfo } from '../cli/console.js';
+import { mcpClient } from '../mcp/client.js';
+import { toolConfig } from '../tools/definitions.js';
 import type { ChatHistory, LLMResponse } from '../types.js';
 import {
 	chatHistoryToGeminiContent,
@@ -19,24 +23,91 @@ import { GeminiConfigSchema } from './geminiValidation.js';
 
 /**
  * Wrapper for Gemini chat session that provides universal dictionary-based history format.
+ * Supports function calling with automatic tool execution.
  */
 export class GeminiChatSessionWrapper {
 	private geminiSession: ChatSession;
+	private toolsEnabled: boolean;
 
-	constructor(geminiSession: ChatSession) {
+	constructor(geminiSession: ChatSession, toolsEnabled: boolean = false) {
 		this.geminiSession = geminiSession;
+		this.toolsEnabled = toolsEnabled;
 	}
 
 	/**
 	 * Forwards message to Gemini session.
+	 * Handles function calling loop if tools are enabled.
 	 */
 	async sendMessage(text: string): Promise<LLMResponse> {
-		const result = await this.geminiSession.sendMessage(text);
-		const response = result.response;
+		let result = await this.geminiSession.sendMessage(text);
+		let response = result.response;
+
+		// Function calling loop - keep executing until no more function calls
+		if (this.toolsEnabled) {
+			while (true) {
+				const functionCalls = response.functionCalls();
+
+				if (!functionCalls || functionCalls.length === 0) {
+					break;
+				}
+
+				// Execute all function calls and collect responses
+				const functionResponses = await this.executeFunctionCalls(
+					functionCalls,
+				);
+
+				// Send function responses back to the model
+				result = await this.geminiSession.sendMessage(functionResponses);
+				response = result.response;
+			}
+		}
+
 		return {
 			text: response.text(),
 			tokensUsed: response.usageMetadata?.totalTokenCount,
 		};
+	}
+
+	/**
+	 * Executes function calls via MCP client and returns responses.
+	 */
+	private async executeFunctionCalls(
+		functionCalls: FunctionCall[],
+	): Promise<FunctionResponsePart[]> {
+		const responses: FunctionResponsePart[] = [];
+
+		for (const call of functionCalls) {
+			printInfo(`🔧 Wykonuję narzędzie: ${call.name}`);
+
+			try {
+				const toolResult = await mcpClient.executeTool(
+					call.name,
+					call.args as Record<string, unknown>,
+				);
+
+				responses.push({
+					functionResponse: {
+						name: call.name,
+						response: toolResult as object,
+					},
+				});
+
+				printInfo(`✓ Narzędzie ${call.name} wykonane pomyślnie`);
+			} catch (error) {
+				const errorMessage =
+					error instanceof Error ? error.message : String(error);
+				printError(`✗ Błąd narzędzia ${call.name}: ${errorMessage}`);
+
+				responses.push({
+					functionResponse: {
+						name: call.name,
+						response: { error: errorMessage },
+					},
+				});
+			}
+		}
+
+		return responses;
 	}
 
 	/**
@@ -105,11 +176,13 @@ export class GeminiLLMClient {
 
 	/**
 	 * Creates a new chat session with the specified configuration.
+	 * Optionally enables tool/function calling capabilities.
 	 */
 	createChatSession(
 		systemInstruction: string,
 		history?: ChatHistory,
 		_thinkingBudget: number = 0,
+		enableTools: boolean = true,
 	): GeminiChatSessionWrapper {
 		if (!this.model) {
 			throw new Error('LLM client not initialized');
@@ -118,17 +191,29 @@ export class GeminiLLMClient {
 		// Convert universal dict format to Gemini Content objects
 		const geminiHistory = history ? chatHistoryToGeminiContent(history) : [];
 
-		// Create generative model with system instruction
-		const modelWithConfig = this.client.getGenerativeModel({
+		// Create generative model with system instruction and optional tools
+		const modelConfig: {
+			model: string;
+			systemInstruction: string;
+			tools?: Array<{
+				functionDeclarations: typeof toolConfig.functionDeclarations;
+			}>;
+		} = {
 			model: this.modelName,
 			systemInstruction: systemInstruction,
-		});
+		};
+
+		if (enableTools) {
+			modelConfig.tools = [toolConfig];
+		}
+
+		const modelWithConfig = this.client.getGenerativeModel(modelConfig);
 
 		const geminiSession = modelWithConfig.startChat({
 			history: geminiHistory,
 		});
 
-		return new GeminiChatSessionWrapper(geminiSession);
+		return new GeminiChatSessionWrapper(geminiSession, enableTools);
 	}
 
 	/**
