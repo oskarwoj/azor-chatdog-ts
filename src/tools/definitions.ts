@@ -40,11 +40,32 @@ export const deleteThreadTool: FunctionDeclaration = {
 };
 
 /**
+ * Tool definition for getting thread data (metadata and messages).
+ */
+export const getThreadDataTool: FunctionDeclaration = {
+	name: 'get_thread_data',
+	description:
+		'Reads and returns both the metadata and the content (messages) of a specific chat thread from the ~/.azor/ directory. Requires the exact filename (e.g., "abc123-log.json"). Returns metadata (session_id, model, system_role, assistant_id, title) and messages array.',
+	parameters: {
+		type: SchemaType.OBJECT,
+		properties: {
+			filename: {
+				type: SchemaType.STRING,
+				description:
+					'The exact filename of the thread to read (e.g., "session_123-log.json")',
+			},
+		},
+		required: ['filename'],
+	},
+};
+
+/**
  * All available tools for AZOR.
  */
 export const azorTools: FunctionDeclaration[] = [
 	listThreadsTool,
 	deleteThreadTool,
+	getThreadDataTool,
 ];
 
 /**

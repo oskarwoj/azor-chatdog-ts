@@ -51,6 +51,27 @@ export interface DeleteThreadResult {
 	message: string;
 }
 
+export interface ThreadMetadata {
+	session_id: string;
+	model: string;
+	system_role: string;
+	assistant_id?: string;
+	title?: string;
+}
+
+export interface ThreadMessage {
+	role: 'user' | 'model';
+	text: string;
+	timestamp: string;
+}
+
+export interface GetThreadDataResult {
+	success: boolean;
+	message?: string;
+	metadata?: ThreadMetadata;
+	messages?: ThreadMessage[];
+}
+
 interface TextContent {
 	type: 'text';
 	text: string;
@@ -156,6 +177,27 @@ class MCPClient {
 	}
 
 	/**
+	 * Gets the metadata and messages of a specific thread.
+	 */
+	async getThreadData(filename: string): Promise<GetThreadDataResult> {
+		const client = await this.ensureConnected();
+		const result = await client.callTool({
+			name: 'get_thread_data',
+			arguments: { filename },
+		});
+
+		const content = result.content as ToolResultContent[];
+		const textContent = content.find(
+			(c): c is TextContent => c.type === 'text',
+		);
+		if (textContent) {
+			return JSON.parse(textContent.text) as GetThreadDataResult;
+		}
+
+		return { success: false, message: 'Unknown error' };
+	}
+
+	/**
 	 * Executes a tool by name with given arguments.
 	 * Used by the LLM function calling integration.
 	 */
@@ -168,6 +210,8 @@ class MCPClient {
 				return await this.listThreads();
 			case 'delete_thread':
 				return await this.deleteThread(args.filename as string);
+			case 'get_thread_data':
+				return await this.getThreadData(args.filename as string);
 			default:
 				throw new Error(`Unknown tool: ${name}`);
 		}
