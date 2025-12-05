@@ -215,7 +215,7 @@ export class LlamaClient {
 		modelName: string,
 		modelPath: string,
 		nGpuLayers: number = 1,
-		nCtx: number = 2048,
+		nCtx: number = 8192,
 		samplingParams: SamplingParams = { temperature: 0.8, topP: 0.9, topK: 40 },
 	) {
 		if (!modelPath) {
@@ -252,7 +252,7 @@ export class LlamaClient {
 			modelName: process.env.LLAMA_MODEL_NAME || 'llama-3.1-8b-instruct',
 			llamaModelPath: process.env.LLAMA_MODEL_PATH || '',
 			llamaGpuLayers: parseInt(process.env.LLAMA_GPU_LAYERS || '1', 10),
-			llamaContextSize: parseInt(process.env.LLAMA_CONTEXT_SIZE || '2048', 10),
+			llamaContextSize: parseInt(process.env.LLAMA_CONTEXT_SIZE || '8192', 10),
 			llamaTemperature: parseFloat(process.env.LLAMA_TEMPERATURE || '0.8'),
 			llamaTopP: parseFloat(process.env.LLAMA_TOP_P || '0.9'),
 			llamaTopK: parseInt(process.env.LLAMA_TOP_K || '40', 10),

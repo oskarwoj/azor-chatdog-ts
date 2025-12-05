@@ -20,9 +20,9 @@ export const LlamaConfigSchema = z.object({
 	llamaContextSize: z
 		.number()
 		.int()
-		.min(1)
-		.default(2048)
-		.describe('Rozmiar kontekstu'),
+		.min(512)
+		.default(8192)
+		.describe('Rozmiar kontekstu (min 8192 zalecane dla narzędzi)'),
 	llamaTemperature: z
 		.number()
 		.min(0)
