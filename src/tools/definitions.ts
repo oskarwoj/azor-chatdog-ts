@@ -8,6 +8,7 @@ import { SchemaType, type FunctionDeclaration } from '@google/generative-ai';
 import type { ChatSessionModelFunctions } from 'node-llama-cpp';
 import { printError, printInfo } from '../cli/console.js';
 import { mcpClient } from '../mcp/client.js';
+import { getErrorMessage } from '../utils/errorUtils.js';
 
 /**
  * Tool definition for listing all chat threads.
@@ -172,8 +173,7 @@ function createToolHandler(
 			printInfo(`✓ Narzędzie ${toolName} wykonane pomyślnie`);
 			return result;
 		} catch (error) {
-			const errorMessage =
-				error instanceof Error ? error.message : String(error);
+			const errorMessage = getErrorMessage(error);
 			printError(`✗ Błąd narzędzia ${toolName}: ${errorMessage}`);
 			return { error: errorMessage };
 		}

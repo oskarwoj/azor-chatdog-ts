@@ -8,6 +8,7 @@ import { printError, printInfo } from '../cli/console.js';
 import { mcpClient } from '../mcp/client.js';
 import { ollamaToolConfig, type OllamaTool } from '../tools/definitions.js';
 import type { ChatHistory, LLMResponse, Message } from '../types.js';
+import { getErrorMessage } from '../utils/errorUtils.js';
 import { OllamaConfigSchema } from './ollamaValidation.js';
 
 /** Name of the clarification tool for detection */
@@ -238,8 +239,7 @@ export class OllamaChatSession {
 				});
 				printInfo(`✓ Narzędzie ${toolName} wykonane pomyślnie`);
 			} catch (error) {
-				const errorMessage =
-					error instanceof Error ? error.message : String(error);
+				const errorMessage = getErrorMessage(error);
 				printError(`✗ Błąd narzędzia ${toolName}: ${errorMessage}`);
 				toolMessages.push({
 					role: 'tool',
@@ -377,7 +377,7 @@ export class OllamaChatSession {
 	/**
 	 * Returns the current conversation history.
 	 */
-	getHistory(): ChatHistory {
+	async getHistory(): Promise<ChatHistory> {
 		return this._history;
 	}
 }

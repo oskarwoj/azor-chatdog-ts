@@ -17,6 +17,7 @@ import { printError, printInfo } from '../cli/console.js';
 import { mcpClient } from '../mcp/client.js';
 import { llamaToolConfig } from '../tools/definitions.js';
 import type { ChatHistory, LLMResponse, Message } from '../types.js';
+import { getErrorMessage } from '../utils/errorUtils.js';
 import { LlamaConfigSchema } from './llamaValidation.js';
 
 /** Name of the clarification tool for detection */
@@ -106,8 +107,7 @@ export class LlamaChatSession {
 							printInfo(`✓ Narzędzie ${name} wykonane pomyślnie`);
 							return result;
 						} catch (error) {
-							const errorMessage =
-								error instanceof Error ? error.message : String(error);
+							const errorMessage = getErrorMessage(error);
 							printError(`✗ Błąd narzędzia ${name}: ${errorMessage}`);
 							return { error: errorMessage };
 						}
@@ -194,7 +194,7 @@ export class LlamaChatSession {
 	/**
 	 * Returns the current conversation history.
 	 */
-	getHistory(): ChatHistory {
+	async getHistory(): Promise<ChatHistory> {
 		return this._history;
 	}
 }

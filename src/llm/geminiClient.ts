@@ -15,6 +15,7 @@ import { printError, printInfo } from '../cli/console.js';
 import { mcpClient } from '../mcp/client.js';
 import { toolConfig } from '../tools/definitions.js';
 import type { ChatHistory, LLMResponse } from '../types.js';
+import { getErrorMessage } from '../utils/errorUtils.js';
 import {
 	chatHistoryToGeminiContent,
 	geminiContentToChatHistory,
@@ -124,8 +125,7 @@ export class GeminiChatSessionWrapper {
 
 				printInfo(`✓ Narzędzie ${call.name} wykonane pomyślnie`);
 			} catch (error) {
-				const errorMessage =
-					error instanceof Error ? error.message : String(error);
+				const errorMessage = getErrorMessage(error);
 				printError(`✗ Błąd narzędzia ${call.name}: ${errorMessage}`);
 
 				responses.push({
@@ -214,10 +214,7 @@ export class GeminiLLMClient {
 		_thinkingBudget: number = 0,
 		enableTools: boolean = true,
 	): GeminiChatSessionWrapper {
-		if (!this.model) {
-			throw new Error('LLM client not initialized');
-		}
-
+		// Note: this.model is always defined - set in constructor, which exits on failure
 		// Convert universal dict format to Gemini Content objects
 		const geminiHistory = history ? chatHistoryToGeminiContent(history) : [];
 

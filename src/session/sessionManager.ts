@@ -1,5 +1,4 @@
 import { createAssistant } from '../assistant/assistants.js';
-import { createAzorAssistant } from '../assistant/azor.js';
 import {
 	displayFinalInstructions,
 	displayHelp,
@@ -59,7 +58,7 @@ export class SessionManager {
 		}
 
 		// Create new session
-		const assistant = createAzorAssistant();
+		const assistant = createAssistant('azor');
 		const newSession = new ChatSession(assistant);
 		await newSession.initialize();
 		this._currentSession = newSession;
@@ -101,7 +100,7 @@ export class SessionManager {
 		}
 
 		// Load new session
-		const assistant = createAzorAssistant();
+		const assistant = createAssistant('azor');
 		const [newSession, error] = await ChatSession.loadFromFile(
 			assistant,
 			sessionId,
@@ -155,7 +154,7 @@ export class SessionManager {
 		const [removeSuccess, removeError] = removeSessionFile(removedSessionId);
 
 		// Create a new session regardless of whether the file was successfully removed
-		const assistant = createAzorAssistant();
+		const assistant = createAssistant('azor');
 		const newSession = new ChatSession(assistant);
 		await newSession.initialize();
 		this._currentSession = newSession;
@@ -184,7 +183,7 @@ export class SessionManager {
 	 */
 	async initializeFromCLI(cliSessionId: string | null): Promise<ChatSession> {
 		if (cliSessionId) {
-			const assistant = createAzorAssistant();
+			const assistant = createAssistant('azor');
 			const [session, error] = await ChatSession.loadFromFile(
 				assistant,
 				cliSessionId,
@@ -214,7 +213,7 @@ export class SessionManager {
 			}
 		} else {
 			console.log('Rozpoczynanie nowej sesji.');
-			const assistant = createAzorAssistant();
+			const assistant = createAssistant('azor');
 			const session = new ChatSession(assistant);
 			await session.initialize();
 			this._currentSession = session;

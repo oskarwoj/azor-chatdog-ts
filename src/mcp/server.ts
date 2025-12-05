@@ -11,11 +11,67 @@ import {
 import { join } from 'path';
 import { z } from 'zod';
 import { LOG_DIR } from '../files/config.js';
+import { getErrorMessage } from '../utils/errorUtils.js';
 
 const server = new McpServer({
 	name: 'azor-mcp',
 	version: '1.0.0',
 });
+
+/**
+ * Result type for filename validation
+ */
+interface ValidationResult {
+	valid: boolean;
+	error?: string;
+}
+
+/**
+ * Validates a filename for security and format.
+ * Returns validation result with error message if invalid.
+ */
+function validateFilename(
+	filename: string,
+	operation: string,
+): ValidationResult {
+	if (!filename || filename.trim() === '') {
+		return {
+			valid: false,
+			error: 'Invalid filename: filename cannot be empty.',
+		};
+	}
+
+	if (!filename.endsWith('.json')) {
+		return {
+			valid: false,
+			error: `Invalid filename: only .json files can be ${operation}.`,
+		};
+	}
+
+	// Security check: ensure the filename doesn't contain path traversal
+	if (
+		filename.includes('..') ||
+		filename.includes('/') ||
+		filename.includes('\\')
+	) {
+		return {
+			valid: false,
+			error: 'Invalid filename: path traversal is not allowed.',
+		};
+	}
+
+	return { valid: true };
+}
+
+/**
+ * Creates a structured MCP response with both text and structured content.
+ */
+function createResponse<T extends object>(output: T) {
+	return {
+		content: [{ type: 'text' as const, text: JSON.stringify(output, null, 2) }],
+		structuredContent: output,
+	};
+}
 
 /**
  * Tool: list_threads
@@ -39,11 +95,7 @@ server.registerTool(
 	},
 	async () => {
 		if (!existsSync(LOG_DIR)) {
-			const output = { threads: [] };
-			return {
-				content: [{ type: 'text', text: JSON.stringify(output, null, 2) }],
-				structuredContent: output,
-			};
+			return createResponse({ threads: [] });
 		}
 
 		const files = readdirSync(LOG_DIR);
@@ -58,11 +110,7 @@ server.registerTool(
 			};
 		});
 
-		const output = { threads };
-		return {
-			content: [{ type: 'text', text: JSON.stringify(output, null, 2) }],
-			structuredContent: output,
-		};
+		return createResponse({ threads });
 	},
 );
 
@@ -89,79 +137,32 @@ server.registerTool(
 		},
 	},
 	async ({ filename }) => {
-		// Validate filename is not empty and is a JSON file
-		if (!filename || filename.trim() === '') {
-			const output = {
-				success: false,
-				message: 'Invalid filename: filename cannot be empty.',
-			};
-			return {
-				content: [{ type: 'text', text: JSON.stringify(output, null, 2) }],
-				structuredContent: output,
-			};
-		}
-
-		if (!filename.endsWith('.json')) {
-			const output = {
-				success: false,
-				message: 'Invalid filename: only .json files can be deleted.',
-			};
-			return {
-				content: [{ type: 'text', text: JSON.stringify(output, null, 2) }],
-				structuredContent: output,
-			};
-		}
-
-		// Security check: ensure the filename doesn't contain path traversal
-		if (
-			filename.includes('..') ||
-			filename.includes('/') ||
-			filename.includes('\\')
-		) {
-			const output = {
-				success: false,
-				message: 'Invalid filename: path traversal is not allowed.',
-			};
-			return {
-				content: [{ type: 'text', text: JSON.stringify(output, null, 2) }],
-				structuredContent: output,
-			};
+		// Validate filename
+		const validation = validateFilename(filename, 'deleted');
+		if (!validation.valid) {
+			return createResponse({ success: false, message: validation.error });
 		}
 
 		const filePath = join(LOG_DIR, filename);
 
 		if (!existsSync(filePath)) {
-			const output = {
+			return createResponse({
 				success: false,
 				message: `File "${filename}" not found in ${LOG_DIR}.`,
-			};
-			return {
-				content: [{ type: 'text', text: JSON.stringify(output, null, 2) }],
-				structuredContent: output,
-			};
+			});
 		}
 
 		try {
 			unlinkSync(filePath);
-			const output = {
+			return createResponse({
 				success: true,
 				message: `Successfully deleted "${filename}".`,
-			};
-			return {
-				content: [{ type: 'text', text: JSON.stringify(output, null, 2) }],
-				structuredContent: output,
-			};
+			});
 		} catch (error) {
-			const errorMessage =
-				error instanceof Error ? error.message : String(error);
-			const output = {
+			return createResponse({
 				success: false,
-				message: `Failed to delete "${filename}": ${errorMessage}`,
-			};
-			return {
-				content: [{ type: 'text', text: JSON.stringify(output, null, 2) }],
-				structuredContent: output,
-			};
+				message: `Failed to delete "${filename}": ${getErrorMessage(error)}`,
+			});
 		}
 	},
 );
@@ -208,63 +209,26 @@ server.registerTool(
 		},
 	},
 	async ({ filename }) => {
-		// Validate filename is not empty and is a JSON file
-		if (!filename || filename.trim() === '') {
-			const output = {
-				success: false,
-				message: 'Invalid filename: filename cannot be empty.',
-			};
-			return {
-				content: [{ type: 'text', text: JSON.stringify(output, null, 2) }],
-				structuredContent: output,
-			};
-		}
-
-		if (!filename.endsWith('.json')) {
-			const output = {
-				success: false,
-				message: 'Invalid filename: only .json files can be read.',
-			};
-			return {
-				content: [{ type: 'text', text: JSON.stringify(output, null, 2) }],
-				structuredContent: output,
-			};
-		}
-
-		// Security check: ensure the filename doesn't contain path traversal
-		if (
-			filename.includes('..') ||
-			filename.includes('/') ||
-			filename.includes('\\')
-		) {
-			const output = {
-				success: false,
-				message: 'Invalid filename: path traversal is not allowed.',
-			};
-			return {
-				content: [{ type: 'text', text: JSON.stringify(output, null, 2) }],
-				structuredContent: output,
-			};
+		// Validate filename
+		const validation = validateFilename(filename, 'read');
+		if (!validation.valid) {
+			return createResponse({ success: false, message: validation.error });
 		}
 
 		const filePath = join(LOG_DIR, filename);
 
 		if (!existsSync(filePath)) {
-			const output = {
+			return createResponse({
 				success: false,
 				message: `File "${filename}" not found in ${LOG_DIR}.`,
-			};
-			return {
-				content: [{ type: 'text', text: JSON.stringify(output, null, 2) }],
-				structuredContent: output,
-			};
+			});
 		}
 
 		try {
 			const fileContent = readFileSync(filePath, 'utf-8');
 			const threadData = JSON.parse(fileContent);
 
-			const output = {
+			return createResponse({
 				success: true,
 				metadata: {
 					session_id: threadData.session_id,
@@ -276,23 +240,12 @@ server.registerTool(
 					...(threadData.title && { title: threadData.title }),
 				},
 				messages: threadData.history || [],
-			};
-
-			return {
-				content: [{ type: 'text', text: JSON.stringify(output, null, 2) }],
-				structuredContent: output,
-			};
+			});
 		} catch (error) {
-			const errorMessage =
-				error instanceof Error ? error.message : String(error);
-			const output = {
+			return createResponse({
 				success: false,
-				message: `Failed to read "${filename}": ${errorMessage}`,
-			};
-			return {
-				content: [{ type: 'text', text: JSON.stringify(output, null, 2) }],
-				structuredContent: output,
-			};
+				message: `Failed to read "${filename}": ${getErrorMessage(error)}`,
+			});
 		}
 	},
 );

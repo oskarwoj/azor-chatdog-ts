@@ -1,5 +1,5 @@
+import { printAssistant, printInfo, printUser } from '../cli/console.js';
 import type { ChatHistory } from '../types.js';
-import { printInfo, printUser, printAssistant } from '../cli/console.js';
 
 /**
  * Displays history summary: count of omitted messages and the last 2 messages.
@@ -7,42 +7,50 @@ import { printInfo, printUser, printAssistant } from '../cli/console.js';
  * @param history - List of messages in the format {"role": "user|model", "parts": [{"text": "..."}]}
  * @param assistantName - Name of the assistant to display
  */
-export function displayHistorySummary(history: ChatHistory, assistantName: string): void {
-  const totalCount = history.length;
+export function displayHistorySummary(
+	history: ChatHistory,
+	assistantName: string,
+): void {
+	const totalCount = history.length;
 
-  if (totalCount === 0) {
-    return;
-  }
+	if (totalCount === 0) {
+		return;
+	}
 
-  // Display summary
-  if (totalCount > 2) {
-    printInfo('\n--- Wątek sesji wznowiony ---');
-    const omittedCount = totalCount - 2;
-    printInfo(`(Pominięto ${omittedCount} wcześniejszych wiadomości)`);
-  } else {
-    printInfo('\n--- Wątek sesji ---');
-  }
+	// Display summary
+	if (totalCount > 2) {
+		printInfo('\n--- Wątek sesji wznowiony ---');
+		const omittedCount = totalCount - 2;
+		printInfo(`(Pominięto ${omittedCount} wcześniejszych wiadomości)`);
+	} else {
+		printInfo('\n--- Wątek sesji ---');
+	}
 
-  // Display last 2 messages
-  const lastTwo = history.slice(-2);
+	// Display last 2 messages
+	const lastTwo = history.slice(-2);
+	const maxLength = 80;
 
-  for (const content of lastTwo) {
-    // Handle universal dictionary format
-    const role = content.role || '';
-    const displayRole = role === 'user' ? 'TY' : assistantName;
+	for (const content of lastTwo) {
+		// Handle universal dictionary format
+		const role = content.role || '';
+		const displayRole = role === 'user' ? 'TY' : assistantName;
 
-    // Extract text from parts
-    let text = '';
-    if (content.parts && content.parts.length > 0) {
-      text = content.parts[0].text || '';
-    }
+		// Extract text from parts
+		let text = '';
+		if (content.parts && content.parts.length > 0) {
+			text = content.parts[0].text || '';
+		}
 
-    if (role === 'user') {
-      printUser(`  ${displayRole}: ${text.substring(0, 80)}...`);
-    } else if (role === 'model') {
-      printAssistant(`  ${displayRole}: ${text.substring(0, 80)}...`);
-    }
-  }
+		// Only add ellipsis if text was actually truncated
+		const displayText =
+			text.length > maxLength ? text.substring(0, maxLength) + '...' : text;
 
-  printInfo('----------------------------');
+		if (role === 'user') {
+			printUser(`  ${displayRole}: ${displayText}`);
+		} else if (role === 'model') {
+			printAssistant(`  ${displayRole}: ${displayText}`);
+		}
+	}
+
+	printInfo('----------------------------');
 }
