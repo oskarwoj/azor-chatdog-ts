@@ -123,6 +123,15 @@ npm run dev -- --session-id=<SESSION_ID>
 
 - `/pdf` - Export current session to PDF
 
+## Assistants
+
+Use `/assistant list` to view available personas and `/assistant switch <ID>` to change the current assistant without losing history.
+
+- `azor` - friendly default dog assistant
+- `biznesmen` - concise, goal-oriented business voice
+- `optymista` - warm, encouraging supporter
+- `angel_investor` - impatient investor who challenges ideas; replies in 2-4 sentences that call out the weakest point, ask for a concrete metric (traction, CAC, LTV, margin, timeline), and propose a fast de-risking next step
+
 ## Project Structure
 
 ```
